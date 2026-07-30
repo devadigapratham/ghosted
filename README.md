@@ -1,5 +1,10 @@
 # Ghosted 👻
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-173%20passing-1b7f4d)
+![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
+
 Logs every job you apply to on Handshake, so you know exactly who ghosted you.
 
 Apply to something on [Handshake](https://joinhandshake.com) and a small
@@ -9,6 +14,10 @@ there), hit Enter, and it's logged.
 
 Free, no account, no sign-up, nothing to pay for. Google Sheets sync is
 available if you want it, and optional.
+
+![The Ghosted dashboard](docs/dashboard-dark.jpg)
+
+*Screenshots use generated sample data.*
 
 ## Quick start
 
@@ -42,6 +51,9 @@ authoritative — the sheet if you've connected one, otherwise the local log.
 - **Pipeline** — a column per stage. Change a status and it writes straight back.
 - **All jobs** — searchable, sortable, filterable table of everything, with the
   job URL on each row so you can reopen a posting that's since been pulled.
+
+  ![The All jobs table](docs/all-jobs-light.jpg)
+
 - **Deadlines** — what's closing, overdue first.
 - **Settings** — capture, follow-ups, sponsorship, and the optional sheet.
 
