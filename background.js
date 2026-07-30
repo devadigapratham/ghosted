@@ -7,6 +7,11 @@ const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const RETRY_ALARM = "ghosted-retry";
 const FOLLOWUP_ALARM = "ghosted-followup";
 const FOLLOWUP_NOTIFICATION = "ghosted-followup-note";
+const UPDATE_ALARM = "ghosted-update";
+const UPDATE_NOTIFICATION = "ghosted-update-note";
+const REPO = "devadigapratham/ghosted";
+const MANIFEST_URL = `https://raw.githubusercontent.com/${REPO}/main/manifest.json`;
+const RELEASES_URL = `https://github.com/${REPO}`;
 
 // Kept in step with content_scripts.matches in the manifest.
 const JOB_SITE_PATTERNS = chrome.runtime.getManifest().content_scripts[0].matches;
@@ -408,6 +413,46 @@ async function checkFollowUps() {
   });
 }
 
+// A folder install has no link back to the repo, so it cannot update itself.
+// This just notices that a newer version was published and says so. The request
+// carries nothing about the user; it is a public file fetch.
+async function checkForUpdate({ manual = false } = {}) {
+  const settings = await getSettings();
+  if (!settings.updateCheck && !manual) return { ok: false, error: "Update checks are off" };
+
+  const current = chrome.runtime.getManifest().version;
+  let latest;
+  try {
+    const resp = await fetch(MANIFEST_URL, { cache: "no-store" });
+    if (!resp.ok) return { ok: false, error: `GitHub responded ${resp.status}` };
+    latest = (await resp.json())?.version;
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+  if (!latest) return { ok: false, error: "Couldn't read the published version" };
+
+  const behind = U.compareVersions(latest, current) > 0;
+  await chrome.storage.local.set({
+    update: { latest, current, behind, checkedAt: Date.now() },
+  });
+
+  if (behind && !manual) {
+    const seen = await getLocal("updateNotified", "");
+    if (seen !== latest) {
+      await chrome.storage.local.set({ updateNotified: latest });
+      chrome.notifications.create(UPDATE_NOTIFICATION, {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: `Ghosted ${latest} is available`,
+        message: `You're on ${current}. Click to see what changed.`,
+        priority: 0,
+      });
+    }
+  }
+
+  return { ok: true, latest, current, behind };
+}
+
 async function openSheet() {
   const settings = await getSettings();
   const url = U.sheetUrl(settings.spreadsheetId);
@@ -416,10 +461,9 @@ async function openSheet() {
 }
 
 chrome.notifications.onClicked.addListener((id) => {
-  if (id === FOLLOWUP_NOTIFICATION) {
-    openSheet();
-    chrome.notifications.clear(id);
-  }
+  if (id === FOLLOWUP_NOTIFICATION) openSheet();
+  else if (id === UPDATE_NOTIFICATION) chrome.tabs.create({ url: RELEASES_URL });
+  chrome.notifications.clear(id);
 });
 
 function scheduleAlarms() {
@@ -430,11 +474,13 @@ function scheduleAlarms() {
   // Daily, first run an hour after the worker wakes so it isn't the very first
   // thing a new install does.
   chrome.alarms.create(FOLLOWUP_ALARM, { delayInMinutes: 60, periodInMinutes: 1440 });
+  chrome.alarms.create(UPDATE_ALARM, { delayInMinutes: 5, periodInMinutes: 1440 });
 }
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RETRY_ALARM) processQueue();
   else if (alarm.name === FOLLOWUP_ALARM) checkFollowUps();
+  else if (alarm.name === UPDATE_ALARM) checkForUpdate();
 });
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -592,6 +638,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
       case "openSheet":
         return openSheet();
+
+      case "getUpdate":
+        return { ok: true, ...(await getLocal("update", null)) , repo: RELEASES_URL };
+
+      case "checkUpdate":
+        return checkForUpdate({ manual: true });
 
       case "retryQueue":
         return processQueue({ ignoreBackoff: true });

@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-380%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-384%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to, so you know exactly who ghosted you.
@@ -72,7 +72,8 @@ Optional extras, in the order most people want them:
 
 ### Keeping it up to date
 
-Extensions loaded from a folder don't auto-update.
+An extension loaded from a folder is a copy of the files on disk with no link
+back to this repo, so **pushing code does not update anyone else's install.**
 
 - **ZIP:** download the new ZIP, replace the folder, then hit reload (↻) on the
   card at `chrome://extensions`.
@@ -80,6 +81,21 @@ Extensions loaded from a folder don't auto-update.
 
 Your data lives in browser storage, not in the folder, so updating never touches
 it.
+
+So you don't have to remember, Ghosted checks once a day whether a newer version
+was published and shows a banner in the dashboard plus one notification. It reads
+the `version` field from `manifest.json` on GitHub and sends nothing about you or
+your applications. Turn it off under **Settings → Updates**.
+
+**For real automatic updates, publish to the Chrome Web Store.** $5 once, and
+from then on Chrome pushes new versions to every install within a few hours, with
+no Developer mode and no folder to keep. It's the only mechanism that actually
+auto-updates: Manifest V3 forbids loading remote code, and Chrome blocks
+self-hosted `.crx` installs on macOS and Windows. Remove the `key` field from
+`manifest.json` before uploading, since the Store assigns its own.
+
+Bump `version` in `manifest.json` when you publish a change, or the check has
+nothing to compare against.
 
 ## How it works
 
@@ -461,20 +477,28 @@ Nothing else should need touching.
 
 ```
 manifest.json          MV3 manifest (paste your OAuth client ID here)
-background.js          service worker: OAuth, Sheets calls, retry queue, badge
-shared/utils.js        schema, date parsing, sanitization — used by both sides
+background.js          service worker: OAuth, Sheets calls, retry queue,
+                       reminders, update check, badge
+shared/utils.js        all pure logic, loaded by every context and unit-tested
 content/urlwatch.js    MAIN-world script, hooks pushState for SPA navigation
-content/selectors.js   every Handshake selector, all in one place
-content/content.js     detection, scraping, the confirmation overlay
-app/                   the dashboard: views, charts, settings
-popup/                 toolbar popup: manual log, quick stats, dashboard launcher
-app/data-source.js     storage backend: extension worker or localStorage
+content/selectors.js   per-board selectors and the site registry
+content/content.js     detection, scraping, sponsorship chip, confirm overlay
+app/app.html           the dashboard shell, shared by extension and web
+app/app.js             views, charts, table, settings
+app/app.css            design tokens and layout
+app/data-source.js     storage backend: worker, localStorage, or demo
+popup/                 toolbar popup: quick log, stats, dashboard launcher
 web/index.html         landing page for the hosted build
+vercel.json            static hosting config and rewrites
 icons/                 generated, don't hand-edit
 tools/make-icons.js    regenerates icons/ (npm run icons)
 test/utils.test.js     unit tests for shared logic
 test/sites.test.js     unit tests for the board registry
 test/browser.html      browser integration suite
+docs/                  README screenshots
+ARCHITECTURE.md        components, trust boundaries, cost at scale
+SECURITY.md            threat model and per-permission justification
+TESTPLAN.md            manual checks that need a real browser
 ```
 
 ## Architecture
@@ -489,7 +513,7 @@ npm test
 ```
 
 ```sh
-npm test           # 330 unit tests, no dependencies, no browser
+npm test           # 334 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
@@ -590,16 +614,33 @@ will show a "disable developer mode extensions" prompt now and then; dismissing
 it is fine.
 
 **Does it update automatically?**
-No. An extension loaded from a folder is a copy of the files on your disk, with
-no link back to this repo, so pushing code changes nothing on anyone else's
-machine. To update: `git pull` (or re-download the ZIP and replace the folder),
-then hit reload (↻) on the card at `chrome://extensions`. Your data isn't in the
-folder, so updating never touches it.
+No, not from a folder install, and pushing code changes nothing on anyone else's
+machine. Ghosted does *notice* new versions and tell you, and updating is
+`git pull` (or a fresh ZIP) plus a reload. See
+[Keeping it up to date](#keeping-it-up-to-date). The Chrome Web Store is the only
+route to true auto-updates. The hosted dashboard, if you deploy it, does update
+the moment you push.
 
-Publishing to the Chrome Web Store is the only way to get real auto-updates: from
-then on Chrome pushes new versions to every install within a few hours. It costs
-$5 once. Note that the hosted dashboard, if you deploy it, *does* update the
-moment you push.
+**Which job sites does it work on?**
+Auto-capture runs on Handshake, Greenhouse, Lever, Ashby, Workday,
+SmartRecruiters, Workable, LinkedIn and Indeed. On any *other* careers page you
+can still log manually with the toolbar popup or ⌘/Ctrl+Shift+L, and the
+**Source** column records where each application came from.
+
+**What if I apply through LinkedIn's "apply on company website"?**
+That's handled. The click is logged on LinkedIn, and when the destination
+(Greenhouse, Workday) confirms, Ghosted recognises it as the same role and warns
+instead of silently writing a second row.
+
+**Why does it need to run on LinkedIn and Indeed at all?**
+To read the posting you're looking at. It never writes to those pages beyond its
+own button and overlay, and sends nothing to them. If that trade isn't worth it,
+delete their entries from `content_scripts.matches` in `manifest.json`; manual
+logging still works everywhere via the popup.
+
+**Can I see it before installing anything?**
+Yes — the [live demo](https://ghosted.vercel.app/app?demo=1) is the real dashboard
+on sample data.
 
 **Can I use it on two computers?**
 Yes, two ways. Export a CSV and import it on the other machine, or connect the

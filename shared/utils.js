@@ -74,6 +74,8 @@
     showSponsorshipChip: true,
     // Applications per week to aim for; 0 hides the tile.
     weeklyGoal: 10,
+    // Checks GitHub once a day for a newer release. Sends nothing about you.
+    updateCheck: true,
   };
 
   const DEDUPE_MAX_AGE_DAYS = 365;
@@ -622,6 +624,19 @@
     });
   }
 
+  // Compares dotted version strings. Returns >0 when a is newer than b.
+  function compareVersions(a, b) {
+    const parse = (v) => String(v || "0").split(".").map((n) => parseInt(n, 10) || 0);
+    const left = parse(a);
+    const right = parse(b);
+    const len = Math.max(left.length, right.length);
+    for (let i = 0; i < len; i++) {
+      const diff = (left[i] || 0) - (right[i] || 0);
+      if (diff !== 0) return diff > 0 ? 1 : -1;
+    }
+    return 0;
+  }
+
   // Does this path identify one specific posting, rather than a list of them?
   // Without this the floating button appears on search results, and logging
   // there saves a row whose id is "/jobs/search/" and whose fields are whatever
@@ -758,6 +773,7 @@
     pruneLoggedJobs,
     roleKey,
     looksLikeJobPath,
+    compareVersions,
     summarize,
   };
 })();

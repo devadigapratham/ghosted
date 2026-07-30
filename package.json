@@ -1,8 +1,8 @@
 {
   "name": "ghosted",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Chrome extension that logs Handshake job applications to a Google Sheet",
+  "description": "Chrome extension that logs job applications from Handshake, Greenhouse, Lever, Workday, LinkedIn and more, and flags visa-sponsorship blockers before you apply",
   "license": "MIT",
   "scripts": {
     "test": "node --test \"test/*.test.js\"",

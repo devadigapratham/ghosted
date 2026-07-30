@@ -1375,3 +1375,28 @@ test.describe("looksLikeJobPath", () => {
     assert.strictEqual(U.looksLikeJobPath(""), false);
   });
 });
+
+test.describe("compareVersions", () => {
+  test("orders normal releases", () => {
+    assert.strictEqual(U.compareVersions("1.1.0", "1.0.0"), 1);
+    assert.strictEqual(U.compareVersions("1.0.0", "1.1.0"), -1);
+    assert.strictEqual(U.compareVersions("1.0.0", "1.0.0"), 0);
+  });
+
+  test("compares numerically, not as strings", () => {
+    // "1.10.0" > "1.9.0" is false under string comparison.
+    assert.strictEqual(U.compareVersions("1.10.0", "1.9.0"), 1);
+    assert.strictEqual(U.compareVersions("2.0.0", "10.0.0"), -1);
+  });
+
+  test("handles differing segment counts", () => {
+    assert.strictEqual(U.compareVersions("1.1", "1.1.0"), 0);
+    assert.strictEqual(U.compareVersions("1.1.1", "1.1"), 1);
+  });
+
+  test("treats missing or junk input as 0", () => {
+    assert.strictEqual(U.compareVersions("", ""), 0);
+    assert.strictEqual(U.compareVersions("1.0.0", null), 1);
+    assert.strictEqual(U.compareVersions(undefined, "0.0.1"), -1);
+  });
+});

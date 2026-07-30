@@ -13,25 +13,28 @@ decision determines most of what follows, including the cost of running it.
 ```
 ┌─────────────────────────── the user's browser ───────────────────────────┐
 │                                                                          │
-│  Handshake tab                        Extension                          │
+│  Job board tab                        Extension                          │
 │  ┌────────────────────┐               ┌──────────────────────────────┐   │
 │  │ urlwatch.js        │  MAIN world   │ background.js  (worker)      │   │
 │  │  patches pushState │──────────────▶│  • owns the OAuth token      │   │
 │  ├────────────────────┤   DOM event   │  • all Sheets API calls      │   │
 │  │ content.js         │──────────────▶│  • retry queue + backoff     │   │
-│  │  • detect submit   │  sendMessage  │  • dedupe cache              │   │
-│  │  • scrape job      │               │  • daily follow-up alarm     │   │
-│  │  • work-auth scan  │◀──────────────│  • badge, notifications      │   │
-│  │  • confirm overlay │               └───────┬──────────────────────┘   │
-│  └────────────────────┘                       │                          │
-│    isolated world,                            │ chrome.storage.local     │
-│    never holds a token                        ▼                          │
-│                                        ┌──────────────────┐              │
-│  app/ (dashboard, own tab)             │ applications[]   │ ← source of  │
-│  ┌────────────────────┐  sendMessage   │ queue[]          │   truth      │
-│  │ views, charts,     │◀──────────────▶│ loggedJobs{}     │              │
-│  │ table, settings    │                └──────────────────┘              │
-│  └────────────────────┘                       │                          │
+│  │  • resolve board   │  sendMessage  │  • dedupe: job id + role     │   │
+│  │  • detect submit   │               │  • follow-up + update alarms │   │
+│  │  • scrape job      │◀──────────────│  • badge, notifications      │   │
+│  │  • work-auth scan  │               └───────┬──────────────────────┘   │
+│  │  • confirm overlay │                       │                          │
+│  └────────────────────┘                       │ chrome.storage.local     │
+│    isolated world,                            ▼                          │
+│    never holds a token                 ┌──────────────────┐              │
+│                                        │ applications[]   │ ← source of  │
+│  app/ (dashboard, own tab)             │ queue[]          │   truth      │
+│  ┌────────────────────┐                │ loggedJobs{}     │              │
+│  │ views, charts,     │                └──────────────────┘              │
+│  │ table, settings    │                       │                          │
+│  └─────────┬──────────┘                       │                          │
+│            │ data-source.js                   │                          │
+│            └── extension → worker messages ───┘                          │
 └───────────────────────────────────────────────┼──────────────────────────┘
                                                 │ HTTPS, the user's token
                                                 ▼
@@ -42,10 +45,20 @@ decision determines most of what follows, including the cost of running it.
                                    └────────────────────────────┘
 ```
 
-`shared/utils.js` loads in all three contexts — content script, worker,
-dashboard — and holds every pure function: schema, date parsing, the
-work-authorization classifier, sanitization, CSV/TSV, stats. It performs no I/O,
-which is why the unit tests need no browser and no network.
+`shared/utils.js` loads in all three contexts — content script, worker, dashboard
+— and holds every pure function: schema, date parsing, the work-authorization
+classifier, sanitization, CSV/TSV, import parsing, stats, URL and version
+comparison. It performs no I/O, which is why the unit tests need no browser and
+no network.
+
+`content/selectors.js` holds a per-board registry merged over a shared baseline by
+`resolveSite(hostname)`. Structured `application/ld+json` JobPosting data is
+preferred over any CSS selector, so most boards need only a small entry. Boards
+not in the registry are still loggable on demand: the popup injects the same three
+scripts into the current tab under `activeTab`.
+
+The dashboard reaches storage only through `app/data-source.js`, which is what
+lets one `app.html` serve three environments.
 
 ## Trust boundaries
 
@@ -141,7 +154,17 @@ getRows()      setStatus(row, status)   deleteRow(row)
 getSettings()  saveSettings(patch)      importRows(rows)
 ```
 
-Two implementations sit behind it: the extension (worker messages →
-`chrome.storage` → optional Sheets) and the web build (`localStorage` plus file
-import). An authenticated `FetchSource` would be a third, and no view or chart
-code above the seam would change.
+Three implementations sit behind it:
+
+| Source | Selected when | Storage |
+|---|---|---|
+| extension | `chrome.runtime.id` exists | worker messages → `chrome.storage` → optional Sheets |
+| web | served, no `?demo` | `localStorage` plus file import |
+| demo | served with `?demo=1` | in-memory sample set, writes discarded |
+
+The full interface is `getRows`, `setStatus`, `deleteRow`, `restoreRow`,
+`importRows`, `clearAll`, `getSettings`, `saveSettings`, `getTheme`, `setTheme`,
+`getQueue`, `getUpdate`, `checkUpdate`, `connectGoogle`, `openSheet`,
+`retryQueue`, plus a `can` map of capabilities the views use to hide controls the
+current environment cannot support. An authenticated `FetchSource` would be a
+fourth, and no view or chart code above the seam would change.

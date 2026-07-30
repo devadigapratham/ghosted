@@ -57,7 +57,8 @@ cannot enumerate or read any other file.
 | `contextMenus` | Right-click to log a job. |
 | `activeTab` | Lets the popup read the current tab's URL, only when you click the icon. |
 | `scripting` | Injects the content script into the current tab when you press "Log this job" on a site the manifest does not match. Scoped by `activeTab`, so it only ever reaches the one tab you invoked it on, and only on that click. |
-| `host_permissions: sheets.googleapis.com` | The only network destination. |
+| `host_permissions: sheets.googleapis.com` | The Sheets mirror, if you connect one. |
+| `host_permissions: raw.githubusercontent.com` | One daily fetch of the repo's public `manifest.json` to compare version numbers, so a folder install can tell you it is out of date. No request body and no identifiers; switch it off under Settings → Updates. |
 | `content_scripts.matches` | The job boards listed in the README. The content script reads those pages to find job details; it does not modify them beyond its own button and overlay, and does not run anywhere else. |
 
 ## Known limitations
@@ -71,3 +72,10 @@ cannot enumerate or read any other file.
   installed at once would collide.
 - **Selectors for boards other than Handshake are lightly exercised.** The
   failure mode is a blank field flagged in the overlay, not incorrect data.
+- **On-demand injection reaches whatever tab you invoke it on.** Pressing "Log
+  this job" on an unmatched site injects the content script there under
+  `activeTab`. That is a deliberate trade: a button you press, rather than
+  standing permission to read every site you visit.
+- **The update check is a network call.** It is anonymous and to a public file,
+  but it does reveal to GitHub that someone somewhere runs this extension. Turn
+  it off if that matters to you.

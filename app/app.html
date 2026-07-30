@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="/app/app.css">
 </head>
 <body>
+  <div id="updateBanner" class="demobar" hidden>
+    <span id="updateText"></span>
+    <a id="updateLink" href="https://github.com/devadigapratham/ghosted" target="_blank" rel="noreferrer noopener">What changed →</a>
+  </div>
+
   <div id="demoBanner" class="demobar" hidden>
     <span><strong>Demo data.</strong> Nothing here is saved. Install the extension to track your own applications.</span>
     <a href="https://github.com/devadigapratham/ghosted#quick-start" target="_blank" rel="noreferrer noopener">Get it →</a>
@@ -184,6 +189,21 @@
             Auto-detect application submissions</label>
           <label for="roleOptions">Role dropdown options (comma-separated)</label>
           <input id="roleOptions" type="text" placeholder="SWE, Data, PM, Research, Other">
+        </section>
+
+        <section class="card" id="updateSection">
+          <h3>Updates</h3>
+          <p class="sub">
+            An extension loaded from a folder can't update itself. This checks once a
+            day whether a newer version was published and tells you; it sends nothing
+            about you or your applications.
+          </p>
+          <label class="check"><input id="updateCheck" type="checkbox">
+            Tell me when a new version is out</label>
+          <div class="row">
+            <button id="checkUpdateBtn" class="ghost">Check now</button>
+            <span id="updateStatus" class="status"></span>
+          </div>
         </section>
 
         <section class="card" id="remindersSection">

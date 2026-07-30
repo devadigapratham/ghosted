@@ -6,7 +6,7 @@ const DS = globalThis.GHOSTED_DATA;
 const $ = (id) => document.getElementById(id);
 
 const VIEWS = ["dashboard", "attention", "pipeline", "jobs", "deadlines", "settings"];
-const CHECKBOXES = ["autoCapture", "remindersEnabled", "needsSponsorship", "showSponsorshipChip"];
+const CHECKBOXES = ["autoCapture", "remindersEnabled", "needsSponsorship", "showSponsorshipChip", "updateCheck"];
 const NUMBERS = ["followUpDays", "ghostAfterDays", "weeklyGoal"];
 
 // Sponsorship verdicts carry an icon as well as a colour, so the meaning never
@@ -60,6 +60,7 @@ async function load() {
 
   $("demoBanner").hidden = !DS.demo;
   $("importBtn").hidden = Boolean(DS.demo);
+  showUpdateBanner();
 
   renderAll();
 }
@@ -568,6 +569,33 @@ function renderDeadlines() {
   }));
 }
 
+// Update banner
+async function showUpdateBanner() {
+  const banner = $("updateBanner");
+  const info = await DS.getUpdate();
+  const behind = Boolean(info?.ok && info.behind);
+  banner.hidden = !behind;
+  if (behind) {
+    $("updateText").textContent = `Version ${info.latest} is out. You're on ${info.current}. Pull the repo and reload the extension.`;
+    if (info.repo) $("updateLink").href = info.repo;
+  }
+}
+
+$("checkUpdateBtn").addEventListener("click", async () => {
+  setStatusText("updateStatus", "Checking…");
+  const resp = await DS.checkUpdate();
+  if (!resp?.ok) {
+    setStatusText("updateStatus", resp?.error || "Not available here", "err");
+    return;
+  }
+  setStatusText(
+    "updateStatus",
+    resp.behind ? `Version ${resp.latest} is available` : `Up to date (${resp.current})`,
+    resp.behind ? "err" : "ok"
+  );
+  showUpdateBanner();
+});
+
 // Needs attention
 // One list answering "what should I do now", instead of three places to look.
 const ATTENTION_LABEL = {
@@ -669,7 +697,7 @@ $("importInput").addEventListener("change", (e) => {
 // Settings
 function fillSettings() {
   // The web build has no worker, so nothing that needs one is shown.
-  for (const [cap, id] of [["sheets", "sheetsSection"], ["capture", "captureSection"], ["reminders", "remindersSection"]]) {
+  for (const [cap, id] of [["sheets", "sheetsSection"], ["capture", "captureSection"], ["reminders", "remindersSection"], ["reminders", "updateSection"]]) {
     const node = $(id);
     if (node) node.hidden = !DS.can[cap];
   }

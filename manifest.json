@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Ghosted",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Logs every job you apply to on Handshake, Greenhouse, Lever, Workday, LinkedIn and more, and flags visa-sponsorship blockers before you apply.",
   "minimum_chrome_version": "111",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2FdkRWnwz5eYe574GdhwQFHLYgP7JZr7yeNcId3dTOqKqvdQPL2mgkZ/1ZoDZ8gKxxj4YdneT26W604fg6YbRD/Y1D5/LYUcCZi00zcxvzY1IQm53jRuYfAk441WWPbBQVOqf3TkyXd+tDnAWwZAsY7CfEm2NoPt4otGKUaCIb60tBQU4BhLUvhcc7J/NFgEC5jrlt8q4sO5dQUxdri9WLMNoYNHVqfyWbs1waACdNdkxIv2k7FXX4oS+zd8qgu4mwfi3EBYU/MwOyLjvTIjNdGh5mBhLBhoSFsaAG5SlvXxVW9aa2NtWxvjNSRSzDb0NK/OM/5sCdKyxJTIz87qxwIDAQAB",
@@ -30,7 +30,8 @@
     }
   },
   "host_permissions": [
-    "https://sheets.googleapis.com/"
+    "https://sheets.googleapis.com/",
+    "https://raw.githubusercontent.com/"
   ],
   "background": {
     "service_worker": "background.js"

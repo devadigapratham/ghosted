@@ -33,6 +33,8 @@
       setTheme: (theme) => chrome.storage.local.set({ theme }),
 
       getQueue: () => ask({ type: "getQueue" }),
+      getUpdate: () => ask({ type: "getUpdate" }),
+      checkUpdate: () => ask({ type: "checkUpdate" }),
       connectGoogle: () => ask({ type: "connectGoogle" }),
       openSheet: () => ask({ type: "openSheet" }),
       retryQueue: () => ask({ type: "retryQueue" }),
@@ -145,6 +147,8 @@
       },
 
       getQueue: async () => ({ count: 0 }),
+      getUpdate: async () => ({ ok: false }),
+      checkUpdate: async () => ({ ok: false }),
       connectGoogle: async () => ({ ok: false, error: "Sheets sync needs the extension" }),
       openSheet: async () => ({ ok: false }),
       retryQueue: async () => ({ remaining: 0 }),
@@ -203,6 +207,8 @@
       getTheme: async () => theme,
       setTheme: async (next) => { theme = next; },
       getQueue: async () => ({ count: 0 }),
+      getUpdate: async () => ({ ok: false }),
+      checkUpdate: async () => ({ ok: false }),
       connectGoogle: nope,
       openSheet: nope,
       retryQueue: async () => ({ remaining: 0 }),
