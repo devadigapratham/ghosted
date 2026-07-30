@@ -1,4 +1,4 @@
-const U = globalThis.HS2S;
+const U = globalThis.GHOSTED;
 const $ = (id) => document.getElementById(id);
 
 async function loadSettings() {
@@ -16,17 +16,19 @@ async function saveSettings() {
     setStatus("saveStatus", "Couldn't parse a spreadsheet ID from that value", "err");
     return false;
   }
-  const roleOptions = $("roleOptions").value
-    .split(",")
+
+  const roleOptions = $("roleOptions")
+    .value.split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+
   await chrome.storage.sync.set({
     spreadsheetId,
     sheetName: $("sheetName").value.trim() || "Sheet1",
     autoCapture: $("autoCapture").checked,
     roleOptions: roleOptions.length ? roleOptions : U.DEFAULT_SETTINGS.roleOptions,
   });
-  // Normalize the displayed value to the bare ID.
+
   if (spreadsheetId) $("sheetUrl").value = spreadsheetId;
   setStatus("saveStatus", "Saved ✓", "ok");
   return true;
@@ -41,6 +43,7 @@ function setStatus(id, text, kind) {
 function showHeaderResult(resp) {
   const warn = $("headerWarning");
   warn.hidden = true;
+
   if (!resp) {
     setStatus("connectStatus", "No response from background worker", "err");
   } else if (!resp.ok) {
@@ -62,6 +65,7 @@ function showHeaderResult(resp) {
 async function refreshQueue() {
   const resp = await chrome.runtime.sendMessage({ type: "getQueue" }).catch(() => null);
   $("queueCount").textContent = resp?.count ?? "?";
+
   const err = $("queueError");
   if (resp?.lastError) {
     err.hidden = false;
@@ -76,7 +80,9 @@ $("saveBtn").addEventListener("click", saveSettings);
 $("connectBtn").addEventListener("click", async () => {
   if (!(await saveSettings())) return;
   setStatus("connectStatus", "Connecting…");
-  const resp = await chrome.runtime.sendMessage({ type: "connectGoogle" }).catch((e) => ({ ok: false, error: e.message }));
+  const resp = await chrome.runtime
+    .sendMessage({ type: "connectGoogle" })
+    .catch((e) => ({ ok: false, error: e.message }));
   showHeaderResult(resp);
 });
 

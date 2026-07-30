@@ -1,13 +1,11 @@
-// Content script: detects application submissions on Handshake, scrapes job
-// data, and shows the confirmation overlay. All Google API work happens in
-// the background service worker — no tokens ever live here.
+// Watches for application submissions, scrapes the job, shows the confirm
+// overlay. Sends the finished row to the worker; does no network work itself.
 (() => {
-  if (window.top !== window) return; // only run in the top frame
+  if (window.top !== window) return;
 
-  const S = globalThis.HS2S_SELECTORS;
-  const U = globalThis.HS2S;
+  const S = globalThis.GHOSTED_SELECTORS;
+  const U = globalThis.GHOSTED;
 
-  // ── Settings ──────────────────────────────────────────────────────────
   let settings = { ...U.DEFAULT_SETTINGS };
   chrome.storage.sync.get(U.DEFAULT_SETTINGS, (s) => {
     settings = s;
@@ -18,14 +16,13 @@
     for (const [k, { newValue }] of Object.entries(changes)) settings[k] = newValue;
   });
 
-  // ── State ─────────────────────────────────────────────────────────────
-  // Scraped when the apply modal opens (before the submission animation can
-  // tear the page down), consumed when we detect the success state.
-  let pendingApp = null; // { jobId, data, coverLetter, resumeUpload }
+  // Filled in when the apply modal opens, consumed when submission succeeds.
+  // Scraping has to happen up front — by the time the success toast appears,
+  // the job details behind the modal may already be gone.
+  let pendingApp = null;
   let lastUrl = location.href;
-  const recentlyLogged = new Map(); // jobId → timestamp, session-level double-fire guard
+  const recentlyLogged = new Map();
 
-  // ── Helpers ───────────────────────────────────────────────────────────
   const clean = (s) => String(s || "").replace(/\s+/g, " ").trim();
 
   function getJobId() {
@@ -33,7 +30,7 @@
       const m = location.href.match(p);
       if (m) return m[1];
     }
-    // Split view: the selected card in the list pane usually links to /jobs/<id>.
+    // Split view keeps the job id on the selected card, not in the URL.
     const selected = document.querySelector(
       'a[aria-current="true"][href*="/jobs/"], [aria-selected="true"] a[href*="/jobs/"]'
     );
@@ -50,7 +47,7 @@
       try {
         el = root.querySelector(sel);
       } catch {
-        continue;
+        continue; // selector no longer valid after a redesign
       }
       const t = clean(el?.textContent);
       if (t) return t;
@@ -58,15 +55,16 @@
     return "";
   }
 
-  // Find a short leaf element matching a label regex; return its neighbor's text.
+  // Match a short leaf element against a label, return the value next to it.
   function labeledValue(labelRegex) {
     for (const el of document.querySelectorAll("dt, h3, h4, h5, span, div, p, b, strong")) {
       if (el.childElementCount > 0) continue;
       const t = clean(el.textContent);
       if (!t || t.length > 30 || !labelRegex.test(t)) continue;
-      const sib = el.nextElementSibling;
-      const sibText = clean(sib?.textContent);
+
+      const sibText = clean(el.nextElementSibling?.textContent);
       if (sibText && sibText.length < 200) return sibText;
+
       const parent = el.parentElement;
       if (parent) {
         const rest = clean(parent.textContent).replace(t, "").trim();
@@ -76,7 +74,6 @@
     return "";
   }
 
-  // Scan short leaf elements for a free-text pattern (e.g. "Posted 3 days ago").
   function textMatch(pattern) {
     for (const el of document.querySelectorAll("span, div, p, time, li")) {
       if (el.childElementCount > 0) continue;
@@ -98,13 +95,12 @@
           if (item && item["@type"] === "JobPosting") return item;
         }
       } catch {
-        /* malformed JSON-LD — ignore */
+        // Malformed JSON-LD is common enough to just skip.
       }
     }
     return null;
   }
 
-  // ── Scraping ──────────────────────────────────────────────────────────
   function scrapeJob() {
     const data = {
       Position: "",
@@ -115,19 +111,24 @@
       "Salary Range": "",
     };
 
-    // 1) Structured data first — most stable when present.
+    // Structured data beats scraping whenever it's there.
     const jp = jsonLdJobPosting();
     if (jp) {
       data.Position = clean(jp.title);
       data.Company = clean(jp.hiringOrganization?.name);
       data.Industry = clean(jp.industry);
       data["Date Posted"] = U.parsePostedDate(jp.datePosted);
-      const locs = [].concat(jp.jobLocation || []).map((l) => {
-        const a = l?.address || {};
-        return clean([a.addressLocality, a.addressRegion].filter(Boolean).join(", "));
-      }).filter(Boolean);
+
+      const locs = []
+        .concat(jp.jobLocation || [])
+        .map((l) => {
+          const a = l?.address || {};
+          return clean([a.addressLocality, a.addressRegion].filter(Boolean).join(", "));
+        })
+        .filter(Boolean);
       if (jp.jobLocationType === "TELECOMMUTE") locs.push("Remote");
       data.Location = locs.join("; ");
+
       const sal = jp.baseSalary?.value;
       if (sal) {
         const unit = jp.baseSalary.unitText ? `/${String(jp.baseSalary.unitText).toLowerCase()}` : "";
@@ -136,7 +137,6 @@
       }
     }
 
-    // 2) CSS selectors (data-hook/testid → semantic → generic).
     if (!data.Position) data.Position = queryText(S.css.title);
     if (!data.Company) data.Company = queryText(S.css.company);
     if (!data.Location) data.Location = queryText(S.css.location);
@@ -144,32 +144,59 @@
     if (!data.Industry) data.Industry = queryText(S.css.industry);
     if (!data["Date Posted"]) {
       const el = document.querySelector("time[datetime]");
-      if (el) data["Date Posted"] = U.parsePostedDate(el.getAttribute("datetime"));
-      else data["Date Posted"] = U.parsePostedDate(queryText(S.css.posted));
+      data["Date Posted"] = el
+        ? U.parsePostedDate(el.getAttribute("datetime"))
+        : U.parsePostedDate(queryText(S.css.posted));
     }
 
-    // 3) Label→value pairs.
     if (!data.Industry) data.Industry = labeledValue(S.labels.industry);
     if (!data["Salary Range"]) data["Salary Range"] = labeledValue(S.labels.salary);
     if (!data.Location) data.Location = labeledValue(S.labels.location);
     if (!data["Date Posted"]) data["Date Posted"] = U.parsePostedDate(labeledValue(S.labels.posted));
 
-    // 4) Free-text fallbacks.
     if (!data["Date Posted"]) data["Date Posted"] = U.parsePostedDate(textMatch(S.postedTextPattern));
     if (!data["Salary Range"]) data["Salary Range"] = textMatch(S.salaryTextPattern);
 
-    // Multiple locations sometimes come as "A • B" or "A | B" — normalize to "; ".
+    // Handshake separates multiple locations with bullets; the sheet uses "; ".
     data.Location = data.Location.replace(/\s*[•|·]\s*/g, "; ");
 
     return data;
   }
 
-  // ── Apply-modal tracking ──────────────────────────────────────────────
+  // Does the modal show an actually-attached résumé, or just the word?
+  function detectResumeUpload(dialog) {
+    for (const sel of S.resumeUpload.controls) {
+      let inputs;
+      try {
+        inputs = dialog.querySelectorAll(sel);
+      } catch {
+        continue;
+      }
+      for (const input of inputs) {
+        if (input.type === "file" && input.files?.length) return "Yes";
+        if ((input.type === "radio" || input.type === "checkbox") && input.checked) return "Yes";
+      }
+    }
+
+    // A rendered filename ("resume_2026.pdf") means something is attached.
+    const scopes = dialog.querySelectorAll(
+      '[data-hook*="resume"], [data-testid*="resume"], [data-hook*="document"], [data-testid*="document"], label, li, p, span, div'
+    );
+    for (const el of scopes) {
+      if (el.childElementCount > 0) continue;
+      const t = clean(el.textContent);
+      if (!t || t.length > 120) continue;
+      if (S.resumeUpload.filenamePattern.test(t)) return "Yes";
+      if (S.resume.test(t) && S.resumeUpload.attachedText.test(t)) return "Yes";
+    }
+
+    // The step exists but nothing is attached — say so rather than guessing.
+    return S.resume.test(dialog.textContent || "") ? "No" : "";
+  }
+
   function onApplyModalOpen(dialog) {
-    const jobId = getJobId();
-    // Scrape NOW, while the job page behind the modal is intact.
     pendingApp = {
-      jobId,
+      jobId: getJobId(),
       data: scrapeJob(),
       coverLetter: "",
       resumeUpload: "",
@@ -178,37 +205,34 @@
     scanApplyModal(dialog);
   }
 
-  // Re-scan the open modal on each mutation: multi-step modals reveal the
-  // cover-letter / résumé steps progressively.
+  // Multi-step modals reveal the cover letter / résumé steps as you go, so
+  // rescan on every mutation rather than once on open.
   function scanApplyModal(dialog) {
     if (!pendingApp) return;
-    const text = dialog.textContent || "";
-    if (S.coverLetter.test(text)) pendingApp.coverLetter = "Yes";
-    if (S.resume.test(text)) {
-      // A résumé section with a file input or an attached document counts as an upload.
-      pendingApp.resumeUpload = "Yes";
-    }
+    if (S.coverLetter.test(dialog.textContent || "")) pendingApp.coverLetter = "Yes";
+
+    const upload = detectResumeUpload(dialog);
+    // Never downgrade a "Yes": a later step may re-render without the filename.
+    if (upload === "Yes" || !pendingApp.resumeUpload) pendingApp.resumeUpload = upload;
   }
 
   function findApplyDialog(root) {
     const dialogs = root.matches?.('[role="dialog"], dialog')
       ? [root]
       : [...(root.querySelectorAll?.('[role="dialog"], dialog') || [])];
+
     for (const d of dialogs) {
-      const heading = d.querySelector("h1, h2, h3, [role=heading]");
-      const headText = clean(heading?.textContent);
-      if (S.applyModalHeading.test(headText) || S.resume.test(d.textContent || "")) {
-        if (/apply|application/i.test(d.textContent || "")) return d;
+      const headText = clean(d.querySelector("h1, h2, h3, [role=heading]")?.textContent);
+      const body = d.textContent || "";
+      if ((S.applyModalHeading.test(headText) || S.resume.test(body)) && /apply|application/i.test(body)) {
+        return d;
       }
     }
     return null;
   }
 
-  // ── Submission detection ──────────────────────────────────────────────
   function nodeSignalsSuccess(node) {
-    const text = node.textContent || "";
-    if (S.successText.test(text)) return true;
-    // Apply button flipped to "Applied"
+    if (S.successText.test(node.textContent || "")) return true;
     if (node.matches?.("button") && S.appliedButton.test(clean(node.textContent))) return true;
     for (const btn of node.querySelectorAll?.("button") || []) {
       if (S.appliedButton.test(clean(btn.textContent))) return true;
@@ -220,14 +244,13 @@
     const jobId = pendingApp?.jobId || getJobId();
     if (jobId) {
       const last = recentlyLogged.get(jobId);
-      if (last && Date.now() - last < 60_000) return; // debounce double-fires
+      if (last && Date.now() - last < 60_000) return; // toast + button flip both fire
       recentlyLogged.set(jobId, Date.now());
     }
     triggerLog({ auto: true });
   }
 
   const observer = new MutationObserver((mutations) => {
-    // SPA URL changes that history patching might miss (initial load, hash).
     if (location.href !== lastUrl) onUrlChange();
 
     for (const m of mutations) {
@@ -242,43 +265,41 @@
           return;
         }
       }
-      // Keep scanning an already-open modal as steps appear.
       if (pendingApp?.dialog?.isConnected) scanApplyModal(pendingApp.dialog);
     }
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
-  // External applications: the real submission happens off-site, so capture
-  // at the moment the external link is clicked.
+  // External applies finish on someone else's site, so the click is the only
+  // moment we're guaranteed to still be here.
   document.addEventListener(
     "click",
     (e) => {
       if (!settings.autoCapture) return;
       const target = e.target.closest?.("a, button");
       if (!target) return;
+
       const label = clean(target.textContent) + " " + (target.getAttribute("aria-label") || "");
-      if (S.externalApply.test(label)) {
-        const jobId = getJobId();
-        if (jobId && recentlyLogged.has(jobId) && Date.now() - recentlyLogged.get(jobId) < 60_000) return;
-        if (jobId) recentlyLogged.set(jobId, Date.now());
-        // Scrape immediately; open the overlay shortly after so the click completes.
-        const data = scrapeJob();
-        setTimeout(() => triggerLog({ auto: true, external: true, presetData: { jobId, data } }), 600);
-      }
+      if (!S.externalApply.test(label)) return;
+
+      const jobId = getJobId();
+      if (jobId && Date.now() - (recentlyLogged.get(jobId) || 0) < 60_000) return;
+      if (jobId) recentlyLogged.set(jobId, Date.now());
+
+      const data = scrapeJob();
+      setTimeout(() => triggerLog({ auto: true, external: true, presetData: { jobId, data } }), 600);
     },
     true
   );
 
-  // ── URL change handling ───────────────────────────────────────────────
   function onUrlChange() {
     lastUrl = location.href;
     pendingApp = null;
     updateFloatingButton();
   }
-  window.addEventListener("hs2s:urlchange", onUrlChange);
+  window.addEventListener("ghosted:urlchange", onUrlChange);
   window.addEventListener("popstate", onUrlChange);
 
-  // ── Manual trigger (toolbar popup / context menu) ─────────────────────
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === "openLogOverlay") {
       triggerLog({ auto: false });
@@ -286,9 +307,10 @@
     }
   });
 
-  // ── Shadow-DOM host: floating button, overlay, toasts ─────────────────
+  // Closed shadow root so Handshake's stylesheets can't reach the overlay and
+  // vice versa.
   const host = document.createElement("div");
-  host.id = "hs2s-host";
+  host.id = "ghosted-host";
   const shadow = host.attachShadow({ mode: "closed" });
   const style = document.createElement("style");
   style.textContent = `
@@ -328,9 +350,7 @@
       background: #fff; color: inherit; width: 100%;
     }
     .field textarea { resize: vertical; min-height: 44px; }
-    .field.missing input, .field.missing select {
-      border-color: #e0a800; background: #fffbea;
-    }
+    .field.missing input, .field.missing select { border-color: #e0a800; background: #fffbea; }
     .field .miss-note { font-size: 10px; color: #b07d00; }
     .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
     .actions .hint { margin-right: auto; font-size: 11px; color: #888; align-self: center; }
@@ -370,7 +390,6 @@
   function mountHost() {
     if (!host.isConnected && document.body) document.body.appendChild(host);
   }
-  mountHost();
 
   function updateFloatingButton() {
     mountHost();
@@ -386,13 +405,13 @@
     setTimeout(() => el.remove(), ms);
   }
 
-  // ── Overlay ───────────────────────────────────────────────────────────
   let overlayEl = null;
 
+  // Fields we try to scrape — these get the amber "couldn't find it" treatment.
   const AUTO_FIELDS = new Set(["Position", "Company", "Industry", "Location", "Date Posted", "Salary Range"]);
 
   async function triggerLog({ auto, external = false, presetData = null }) {
-    if (overlayEl) return; // already open
+    if (overlayEl) return;
 
     const jobId = presetData?.jobId ?? pendingApp?.jobId ?? getJobId();
     const scraped = presetData?.data ?? pendingApp?.data ?? scrapeJob();
@@ -404,7 +423,9 @@
     if (jobId) {
       try {
         duplicate = await chrome.runtime.sendMessage({ type: "checkDuplicate", jobId });
-      } catch { /* background asleep/erroring — proceed without dup info */ }
+      } catch {
+        // Worker asleep or reloading — carry on without the dupe warning.
+      }
     }
 
     const today = U.todayISO();
@@ -498,7 +519,7 @@
         if (f.placeholder) input.placeholder = f.placeholder;
         if (f.datalist) {
           const dl = document.createElement("datalist");
-          dl.id = `hs2s-dl-${f.key.replace(/\W/g, "")}`;
+          dl.id = `ghosted-dl-${f.key.replace(/\W/g, "")}`;
           for (const v of f.datalist) {
             const o = document.createElement("option");
             o.value = v;
@@ -508,10 +529,10 @@
           input.setAttribute("list", dl.id);
         }
       }
+
       inputs[f.key] = input;
       wrap.appendChild(input);
 
-      // Flag auto-scrape fields that came back empty.
       if (AUTO_FIELDS.has(f.key) && !row[f.key]) {
         wrap.classList.add("missing");
         const note = document.createElement("span");
@@ -549,14 +570,16 @@
     const save = async () => {
       saveBtn.disabled = true;
       saveBtn.textContent = "Saving…";
+
       const finalRow = {};
       for (const f of fields) finalRow[f.key] = inputs[f.key].value;
+
       try {
         const resp = await chrome.runtime.sendMessage({
           type: "logJob",
           row: finalRow,
           jobId,
-          force: true, // duplicate already surfaced in the overlay
+          force: true, // the overlay already showed the dupe warning
         });
         close();
         if (resp?.ok) toast("✓ Saved to Google Sheet");
@@ -568,9 +591,9 @@
       }
     };
 
-    // Enter/Esc are handled inside the shadow tree, where e.target is the
-    // real inner element (outside a closed shadow root, events retarget to
-    // the host, which would break the Notes-textarea check).
+    // Bound inside the shadow tree, where e.target is still the real input.
+    // On the document side, events retarget to the host and the Notes check
+    // below would never match.
     backdrop.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -582,7 +605,8 @@
         save();
       }
     });
-    // Esc fallback for when focus is outside the overlay entirely.
+
+    // Esc still works if focus escaped the overlay.
     const onKey = (e) => {
       if (overlayEl && e.key === "Escape") {
         e.preventDefault();
@@ -590,13 +614,13 @@
       }
     };
     document.addEventListener("keydown", onKey, true);
+
     backdrop.addEventListener("mousedown", (e) => {
       if (e.target === backdrop) close();
     });
     skipBtn.addEventListener("click", close);
     saveBtn.addEventListener("click", save);
 
-    // Focus the first empty required-ish field, else Role.
     const firstMissing = fields.find((f) => AUTO_FIELDS.has(f.key) && !row[f.key]);
     (inputs[firstMissing?.key] || inputs.Role).focus();
   }

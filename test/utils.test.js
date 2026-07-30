@@ -1,17 +1,13 @@
-// Unit tests for shared/utils.js — the pure logic shared by the content
-// script and the service worker. Run with `npm test` (or `node --test test/`).
-//
-// utils.js is a plain IIFE that assigns globalThis.HS2S (it has to be, so the
-// same file can load as a content_scripts entry and via importScripts), so
-// requiring it for its side effect is all the setup needed.
+// Tests for the pure logic in shared/utils.js. Run: npm test
+// utils.js is an IIFE that assigns globalThis.GHOSTED, so requiring it for the
+// side effect is the whole setup.
 const test = require("node:test");
 const assert = require("node:assert");
 
 require("../shared/utils.js");
-const U = globalThis.HS2S;
+const U = globalThis.GHOSTED;
 
-// Fixed clock so relative-date tests never depend on the day they run.
-// Constructed with local-time parts because toISODate uses local getters.
+// Fixed clock, built from local parts because toISODate reads local getters.
 const NOW = new Date(2026, 6, 30); // 2026-07-30
 
 test("COLUMNS is the 15-column A..O schema", () => {
@@ -21,7 +17,7 @@ test("COLUMNS is the 15-column A..O schema", () => {
   assert.strictEqual(new Set(U.COLUMNS).size, 15, "column names must be unique");
 });
 
-test.describe("parsePostedDate — relative forms", () => {
+test.describe("parsePostedDate — relative", () => {
   const cases = [
     ["Posted 3 days ago", "2026-07-27"],
     ["3 days ago", "2026-07-27"],
@@ -45,7 +41,7 @@ test.describe("parsePostedDate — relative forms", () => {
   }
 });
 
-test.describe("parsePostedDate — absolute forms", () => {
+test.describe("parsePostedDate — absolute", () => {
   const cases = [
     ["2026-07-05", "2026-07-05"],
     ["2026-07-05T12:34:56Z", "2026-07-05"],
@@ -61,31 +57,30 @@ test.describe("parsePostedDate — absolute forms", () => {
   }
 });
 
-test.describe("parsePostedDate — month+day with no year", () => {
-  // Regression: V8 resolves a bare "Jul 5" to the year 2001 instead of
-  // failing, so this must be special-cased before new Date(t) is consulted.
-  test('"Jul 5" assumes the current year, not 2001', () => {
+test.describe("parsePostedDate — month+day, no year", () => {
+  // V8 parses a bare "Jul 5" as the year 2001 instead of failing, which is why
+  // this case is handled before new Date() gets a look.
+  test('"Jul 5" uses the current year, not 2001', () => {
     assert.strictEqual(U.parsePostedDate("Jul 5", NOW), "2026-07-05");
   });
 
-  test('"July 5" assumes the current year', () => {
+  test('"July 5" uses the current year', () => {
     assert.strictEqual(U.parsePostedDate("July 5", NOW), "2026-07-05");
   });
 
-  test('"Jul. 5" tolerates an abbreviating period', () => {
+  test('"Jul. 5" tolerates the abbreviating period', () => {
     assert.strictEqual(U.parsePostedDate("Jul. 5", NOW), "2026-07-05");
   });
 
-  test('"5 July" (day-first) assumes the current year', () => {
+  test('"5 July" (day first) uses the current year', () => {
     assert.strictEqual(U.parsePostedDate("5 July", NOW), "2026-07-05");
   });
 
-  test("a no-year date that would land in the future rolls back a year", () => {
-    // Dec 20 is after 2026-07-30, so the posting must be from 2025.
+  test("a date that would land in the future rolls back a year", () => {
     assert.strictEqual(U.parsePostedDate("Dec 20", NOW), "2025-12-20");
   });
 
-  test("a no-year date earlier today is kept, not rolled back", () => {
+  test("today's date is kept, not rolled back", () => {
     assert.strictEqual(U.parsePostedDate("Jul 30", NOW), "2026-07-30");
   });
 });
@@ -95,7 +90,7 @@ test.describe("parsePostedDate — refuses to guess", () => {
     ["", "empty string"],
     [null, "null"],
     [undefined, "undefined"],
-    ["Posted", "a bare label with no date"],
+    ["Posted", "a bare label"],
     ["sometime soon", "unparseable prose"],
     ["Apply by Friday", "an unrelated phrase"],
   ];
@@ -105,26 +100,25 @@ test.describe("parsePostedDate — refuses to guess", () => {
     });
   }
 
-  test("rejects a future posted date", () => {
+  test("rejects a future date", () => {
     assert.strictEqual(U.parsePostedDate("July 5, 2027", NOW), "");
   });
 
-  test("rejects an absurdly old parsed date rather than writing it", () => {
+  test("rejects an absurdly old date instead of writing it", () => {
     assert.strictEqual(U.parsePostedDate("July 5, 2001", NOW), "");
   });
 
-  test("accepts a date just inside the 5-year sanity window", () => {
+  test("accepts a date just inside the 5-year window", () => {
     assert.strictEqual(U.parsePostedDate("August 1, 2021", NOW), "2021-08-01");
   });
 
-  test("an ISO-prefixed string bypasses the sanity window by design", () => {
-    // The leading-ISO fast path is an explicit, machine-readable date (from
-    // JSON-LD or <time datetime>), so it is trusted as-is.
+  test("an ISO string bypasses the window by design", () => {
+    // Machine-readable dates come from JSON-LD or <time datetime> and are trusted.
     assert.strictEqual(U.parsePostedDate("2001-07-05", NOW), "2001-07-05");
   });
 });
 
-test("parsePostedDate does not mutate the clock it is given", () => {
+test("parsePostedDate doesn't mutate the clock it's handed", () => {
   const now = new Date(2026, 6, 30);
   const before = now.getTime();
   U.parsePostedDate("3 days ago", now);
@@ -134,7 +128,7 @@ test("parsePostedDate does not mutate the clock it is given", () => {
 });
 
 test.describe("sanitizeCell", () => {
-  test("escapes a leading = so Sheets stores it as text", () => {
+  test("escapes a leading = so Sheets keeps it as text", () => {
     assert.strictEqual(U.sanitizeCell("=1+2"), "'=1+2");
   });
 
@@ -144,7 +138,7 @@ test.describe("sanitizeCell", () => {
     });
   }
 
-  test("escapes the classic HYPERLINK injection payload", () => {
+  test("escapes a HYPERLINK payload", () => {
     const out = U.sanitizeCell('=HYPERLINK("http://evil.test","click")');
     assert.ok(out.startsWith("'="), `expected a leading apostrophe, got ${out}`);
   });
@@ -153,12 +147,12 @@ test.describe("sanitizeCell", () => {
     assert.strictEqual(U.sanitizeCell("a=b"), "a=b");
   });
 
-  test("collapses newlines and runs of whitespace", () => {
+  test("collapses newlines and whitespace runs", () => {
     assert.strictEqual(U.sanitizeCell("Software\n\nEngineer   Intern"), "Software Engineer Intern");
     assert.strictEqual(U.sanitizeCell("  padded  "), "padded");
   });
 
-  test("renders null/undefined as an empty string, not the word", () => {
+  test("nullish becomes empty, not the literal word", () => {
     assert.strictEqual(U.sanitizeCell(null), "");
     assert.strictEqual(U.sanitizeCell(undefined), "");
     assert.strictEqual(U.sanitizeCell(""), "");
@@ -168,7 +162,7 @@ test.describe("sanitizeCell", () => {
     assert.strictEqual(U.sanitizeCell(42), "42");
   });
 
-  test("escapes a negative number, which Sheets would otherwise compute", () => {
+  test("escapes a negative number Sheets would otherwise compute", () => {
     assert.strictEqual(U.sanitizeCell("-5"), "'-5");
   });
 });
@@ -176,52 +170,45 @@ test.describe("sanitizeCell", () => {
 test.describe("parseSpreadsheetId", () => {
   const ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms";
 
-  test("extracts the ID from a full edit URL", () => {
-    assert.strictEqual(
-      U.parseSpreadsheetId(`https://docs.google.com/spreadsheets/d/${ID}/edit#gid=0`),
-      ID
-    );
+  test("pulls the ID out of a full edit URL", () => {
+    assert.strictEqual(U.parseSpreadsheetId(`https://docs.google.com/spreadsheets/d/${ID}/edit#gid=0`), ID);
   });
 
-  test("extracts the ID from a URL with query params and no /edit", () => {
-    assert.strictEqual(
-      U.parseSpreadsheetId(`https://docs.google.com/spreadsheets/d/${ID}?usp=sharing`),
-      ID
-    );
+  test("pulls the ID out of a share URL", () => {
+    assert.strictEqual(U.parseSpreadsheetId(`https://docs.google.com/spreadsheets/d/${ID}?usp=sharing`), ID);
   });
 
-  test("passes through a bare ID", () => {
+  test("passes a bare ID through", () => {
     assert.strictEqual(U.parseSpreadsheetId(ID), ID);
   });
 
-  test("trims surrounding whitespace", () => {
+  test("trims whitespace", () => {
     assert.strictEqual(U.parseSpreadsheetId(`  ${ID}  `), ID);
   });
 
-  test("returns \"\" for a too-short bare token", () => {
+  test('returns "" for a too-short token', () => {
     assert.strictEqual(U.parseSpreadsheetId("Sheet1"), "");
   });
 
-  test("returns \"\" for empty/nullish input", () => {
+  test('returns "" for nothing', () => {
     assert.strictEqual(U.parseSpreadsheetId(""), "");
     assert.strictEqual(U.parseSpreadsheetId(null), "");
     assert.strictEqual(U.parseSpreadsheetId(undefined), "");
   });
 
-  test("returns \"\" for a non-Sheets URL", () => {
+  test('returns "" for a non-Sheets URL', () => {
     assert.strictEqual(U.parseSpreadsheetId("https://example.test/not/a/sheet"), "");
   });
 });
 
 test.describe("rowToValues", () => {
-  test("orders cells to match COLUMNS exactly", () => {
+  test("orders cells to match COLUMNS", () => {
     const row = {};
     U.COLUMNS.forEach((col, i) => { row[col] = `v${i}`; });
-    const values = U.rowToValues(row);
-    assert.deepStrictEqual(values, U.COLUMNS.map((_, i) => `v${i}`));
+    assert.deepStrictEqual(U.rowToValues(row), U.COLUMNS.map((_, i) => `v${i}`));
   });
 
-  test("always emits 15 cells, filling absent keys with \"\"", () => {
+  test('always emits 15 cells, absent keys as ""', () => {
     const values = U.rowToValues({ Position: "SWE Intern", Company: "Acme" });
     assert.strictEqual(values.length, 15);
     assert.strictEqual(values[0], "SWE Intern");
@@ -229,19 +216,19 @@ test.describe("rowToValues", () => {
     assert.deepStrictEqual(values.slice(2), Array(13).fill(""));
   });
 
-  test("ignores keys that are not part of the schema", () => {
+  test("drops keys that aren't in the schema", () => {
     const values = U.rowToValues({ Position: "SWE", jobId: "12345", junk: "x" });
     assert.strictEqual(values.length, 15);
     assert.ok(!values.includes("12345"));
   });
 
-  test("sanitizes every cell it writes", () => {
+  test("sanitizes every cell", () => {
     const values = U.rowToValues({ Notes: "=1+2", Position: "Data\nEngineer" });
     assert.strictEqual(values[U.COLUMNS.indexOf("Notes")], "'=1+2");
     assert.strictEqual(values[U.COLUMNS.indexOf("Position")], "Data Engineer");
   });
 
-  test("places the accented Résumé columns correctly", () => {
+  test("puts the accented Résumé columns in the right slots", () => {
     const values = U.rowToValues({ "Résumé upload?": "Yes", "Résumé Form?": "No" });
     assert.strictEqual(values[9], "Yes");
     assert.strictEqual(values[10], "No");
@@ -249,18 +236,81 @@ test.describe("rowToValues", () => {
 });
 
 test.describe("toISODate / todayISO", () => {
-  test("formats using local-time parts, not UTC", () => {
-    // 23:30 local on the 30th must stay the 30th even where UTC is already
-    // the 31st — the bug toISOString() would introduce.
+  test("uses local parts, not UTC", () => {
+    // 23:30 on the 30th stays the 30th even where UTC has rolled over.
     assert.strictEqual(U.toISODate(new Date(2026, 6, 30, 23, 30)), "2026-07-30");
   });
 
-  test("zero-pads single-digit months and days", () => {
+  test("zero-pads month and day", () => {
     assert.strictEqual(U.toISODate(new Date(2026, 0, 5)), "2026-01-05");
   });
 
-  test("todayISO matches toISODate(now)", () => {
+  test("todayISO agrees with toISODate(now)", () => {
     assert.strictEqual(U.todayISO(), U.toISODate(new Date()));
+  });
+});
+
+test.describe("daysBetween", () => {
+  test("counts forward", () => {
+    assert.strictEqual(U.daysBetween("2026-07-27", "2026-07-30"), 3);
+  });
+
+  test("is zero for the same day", () => {
+    assert.strictEqual(U.daysBetween("2026-07-30", "2026-07-30"), 0);
+  });
+
+  test("spans a month boundary", () => {
+    assert.strictEqual(U.daysBetween("2026-06-30", "2026-07-30"), 30);
+  });
+
+  test("returns 0 on garbage rather than NaN", () => {
+    assert.strictEqual(U.daysBetween("nope", "2026-07-30"), 0);
+  });
+});
+
+test.describe("pruneLoggedJobs", () => {
+  const TODAY = "2026-07-30";
+
+  test("keeps recent entries untouched", () => {
+    const logged = { 111: "2026-07-29", 222: "2026-07-01" };
+    assert.deepStrictEqual(U.pruneLoggedJobs(logged, TODAY), logged);
+  });
+
+  test("drops entries past the age limit", () => {
+    const logged = { fresh: "2026-07-29", ancient: "2020-01-01" };
+    const out = U.pruneLoggedJobs(logged, TODAY);
+    assert.deepStrictEqual(Object.keys(out), ["fresh"]);
+  });
+
+  test("keeps an entry exactly at the age limit", () => {
+    const logged = { edge: "2025-07-30" }; // 365 days old
+    assert.strictEqual(U.daysBetween("2025-07-30", TODAY), 365);
+    assert.deepStrictEqual(U.pruneLoggedJobs(logged, TODAY), logged);
+  });
+
+  test("caps the cache, dropping oldest first", () => {
+    const logged = {};
+    for (let i = 0; i < U.DEDUPE_MAX_ENTRIES + 50; i++) {
+      // Older ids get older dates, so ids 0..49 should be the ones evicted.
+      const day = String((i % 28) + 1).padStart(2, "0");
+      const month = i < 50 ? "01" : "07";
+      logged[`job${i}`] = `2026-${month}-${day}`;
+    }
+    const out = U.pruneLoggedJobs(logged, TODAY);
+    assert.strictEqual(Object.keys(out).length, U.DEDUPE_MAX_ENTRIES);
+    assert.ok(!("job0" in out), "oldest entry should have been evicted");
+    assert.ok(`job${U.DEDUPE_MAX_ENTRIES + 49}` in out, "newest entry should survive");
+  });
+
+  test("handles an empty or missing cache", () => {
+    assert.deepStrictEqual(U.pruneLoggedJobs({}, TODAY), {});
+    assert.deepStrictEqual(U.pruneLoggedJobs(undefined, TODAY), {});
+  });
+
+  test("doesn't mutate its input", () => {
+    const logged = { fresh: "2026-07-29", ancient: "2019-01-01" };
+    U.pruneLoggedJobs(logged, TODAY);
+    assert.strictEqual(Object.keys(logged).length, 2);
   });
 });
 

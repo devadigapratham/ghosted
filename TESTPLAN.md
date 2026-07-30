@@ -1,103 +1,123 @@
 # Manual test plan
 
-Prerequisites: extension loaded unpacked, OAuth client configured, options page
-shows "Connected ✓", and a test spreadsheet with the schema header row.
+For the parts that need a real browser. The pure logic is covered by
+`npm test`.
 
-Tip: you can watch the service worker's console via `chrome://extensions` →
-the extension card → **service worker** link. The content script logs appear in
-the normal page DevTools console.
+Before starting: extension loaded, OAuth client configured, options page shows
+"Connected ✓", and a test spreadsheet with the header row.
 
-## 1. Native Handshake apply
+Worker logs are at `chrome://extensions` → the card → **service worker**.
+Content script logs show up in the normal page DevTools console.
 
-1. On Handshake, open a job with a native **Apply** button and complete the
-   application in the modal.
-2. **Expect**: when the "Application submitted" confirmation appears, the
-   overlay opens pre-filled with Position/Company/Location/etc.; Date Applied
-   is today; Status is "Applied"; Latest word is "Application submitted
-   YYYY-MM-DD". If the modal contained a cover-letter or résumé step, those
-   dropdowns are pre-set to "Yes".
-3. Fill Role, press **Enter**. **Expect**: "✓ Saved to Google Sheet" toast and
-   a correctly ordered new row in the sheet.
-4. Press **Esc** instead on another job. **Expect**: overlay closes, nothing
-   is written.
+Suggested order — cheapest and most reversible first: 4, 9, 11, 5, 6, then 1
+and 3 (which need real applications), and 7 last since it revokes access.
 
-## 2. Split view (job list pane)
+## 1. Native apply
 
-1. Apply from the search results split view (job preview in the right pane)
-   rather than the full job page.
-2. **Expect**: same behavior as test 1 — job ID and fields are scraped from
-   the active pane.
+1. Open a job with a normal **Apply** button and finish the application.
+2. Expect: when "Application submitted" appears, the overlay opens pre-filled.
+   Date Applied is today, Status is "Applied", Latest word is "Application
+   submitted YYYY-MM-DD". If the modal had a cover-letter step, that dropdown
+   is "Yes".
+3. Fill Role, press **Enter**. Expect a "✓ Saved to Google Sheet" toast and a
+   correctly ordered row.
+4. On a different job, press **Esc** instead. Expect: overlay closes, nothing
+   written.
+
+## 2. Split view
+
+1. Apply from the search results split view (preview in the right pane) rather
+   than a full job page.
+2. Expect: same as test 1. The job ID comes off the selected card.
 
 ## 3. External application
 
 1. Open a job whose button is **Apply externally** and click it.
-2. **Expect**: the external site opens as normal, and ~1 second later the
-   overlay appears on the Handshake tab, pre-filled, with Notes pre-set to
-   "External application".
+2. Expect: the external site opens normally, and about a second later the
+   overlay appears on the Handshake tab with Notes pre-set to "External
+   application".
 
-## 4. Manual trigger
+## 4. Manual triggers
 
-1. On any job page, click the floating **＋ Log this job** button.
-   **Expect**: overlay opens with scraped data.
-2. Repeat via right-click → "Log this job to Google Sheet", and via the
-   toolbar popup button. **Expect**: same overlay.
+1. On a job page, click the floating **＋ Log this job** button. Expect the
+   overlay with scraped data.
+2. Same via right-click → "Log this job to Google Sheet".
+3. Same via the toolbar popup button.
 
-## 5. Offline retry queue
+Test 3 is the one that catches a missing `activeTab` permission — without it
+the popup can't read the tab URL and reports "Open a Handshake page first" on a
+valid job page.
 
-1. Open the overlay on a job, then go offline (DevTools → Network →
-   "Offline", or turn off Wi-Fi).
-2. Press **Enter** to save. **Expect**: "Saved offline — will retry" toast,
-   toolbar badge shows **1**, options page shows 1 queued row.
-3. Go back online. Within ~2 minutes (or immediately via popup → "Retry
-   queued rows now"), **expect**: the row appears in the sheet, badge clears.
+## 5. Résumé upload detection
 
-## 6. Duplicate detection
+The point here is that mentioning a résumé isn't the same as attaching one.
 
-1. Log a job successfully, then trigger **Log this job** on the same job.
-2. **Expect**: the overlay shows the amber banner "You already logged this job
-   on YYYY-MM-DD" and the button reads **Save anyway**.
-3. Esc → no row. Save anyway → duplicate row is appended.
+1. Open an apply modal that has a résumé step but don't attach anything.
+   Trigger the overlay. Expect **Résumé upload? = No**.
+2. Attach or select a résumé, then trigger it. Expect **Yes**.
+3. Open a job with no résumé step at all. Expect the field **blank**.
 
-## 7. Token expiry / re-auth
+## 6. Offline queue
 
-1. Revoke the app's access at <https://myaccount.google.com/permissions>
-   (or wait ~1 hour for the access token to expire).
-2. Log a job. **Expect**: for a plain expiry, the save succeeds transparently
-   (cached token is invalidated and refreshed on the 401). For a full
-   revocation, a Google consent window opens; after approving, the row saves.
-   If you dismiss the consent window, the row is queued, not lost.
+1. Open the overlay, then go offline (DevTools → Network → Offline, or turn off
+   Wi-Fi).
+2. Press Enter. Expect: "Saved offline — will retry" toast, badge shows **1**,
+   options page shows 1 row waiting.
+3. Go back online. Within ~2 minutes, or immediately via popup → "Retry queued
+   rows now", the row appears and the badge clears.
 
-## 8. Job page missing optional fields
+## 7. Duplicates
+
+1. Log a job, then trigger **Log this job** on the same job again.
+2. Expect the amber "You already logged this job on YYYY-MM-DD" banner, and the
+   button now reads **Save anyway**.
+3. Esc → no row. Save anyway → duplicate row appended.
+
+## 8. Token expiry and re-auth
+
+1. Revoke access at <https://myaccount.google.com/permissions>, or just wait an
+   hour for the access token to expire.
+2. Log a job. For a plain expiry the save should go through silently — the
+   stale token is dropped and refreshed on the 401. For a full revocation a
+   consent window opens, and the row saves after you approve.
+3. Dismiss the consent window instead. Expect the row to be queued, not lost.
+
+## 9. Missing optional fields
 
 1. Find a job with no salary and no industry listed.
-2. Trigger a log. **Expect**: Salary Range and Industry are blank (not
-   guessed), highlighted amber with "couldn't auto-detect — please fill in",
-   and focus lands on the first missing field. Saving writes blanks as-is.
+2. Trigger a log. Expect both blank (not guessed), highlighted amber with
+   "couldn't auto-detect", and focus on the first missing field. Saving writes
+   the blanks as-is.
 
-## 9. Sheet verification
+## 10. Sheet verification
 
-1. Point options at an **empty** tab → Connect. **Expect**: "header row
-   written", and row A1:O1 contains the schema.
-2. Point at a tab with a **different** header → Connect. **Expect**: mismatch
-   warning listing expected vs. found; the sheet is not modified.
+1. Point the options page at an **empty** tab → Connect. Expect "header row
+   written" and A1:O1 filled in.
+2. Point at a tab with a **different** header → Connect. Expect the mismatch
+   warning listing expected vs. found, and no change to the sheet.
 
-## 10. School subdomain
+## 11. School subdomain
 
-1. Use your school's subdomain (e.g. `myschool.joinhandshake.com`) instead of
+1. Use your school's subdomain (`myschool.joinhandshake.com`) rather than
    `app.joinhandshake.com`.
-2. **Expect**: floating button appears on job pages and all flows above work
-   (the content script matches `https://*.joinhandshake.com/*`).
+2. Expect the floating button to appear and everything above to work.
 
-## 11. Formula-injection sanitization
+## 12. Formula injection
 
-1. Log a job and set Notes to `=1+2` before saving.
-2. **Expect**: the sheet cell shows the literal text `=1+2` (stored as
-   `'=1+2`), not the number 3.
+1. Log a job with Notes set to `=1+2`.
+2. Expect the cell to read `=1+2` as literal text (stored as `'=1+2`), not `3`.
 
-## 12. Quota errors (429)
+## 13. Posted-date sanity
 
-Hard to trigger manually; to simulate, temporarily change `spreadsheetId` in
-options to a sheet you can't edit → save a row → **expect** it to queue and the
-badge to appear, with the error visible on the options page. Restore the real
-ID, hit "Retry now" → the row saves (this also exercises the
-retry-after-reconfiguration path).
+1. Find a job whose posted date shows as a bare month and day ("Jul 5") rather
+   than a relative "3 days ago".
+2. Expect the current year, not 2001. This is the case `npm test` covers, worth
+   one real-page confirmation.
+
+## 14. Quota and permission errors
+
+Hard to trigger for real. To simulate: point the options page at a sheet you
+can't edit, save a row, and expect it to queue with the badge showing and the
+error visible on the options page. Restore the real ID and hit "Retry now" —
+the row should save, which also exercises the
+retry-after-reconfiguration path.

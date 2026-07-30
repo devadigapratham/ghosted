@@ -1,13 +1,11 @@
-// Background service worker. Owns all Google OAuth tokens and Sheets API
-// calls — content scripts never see a token. Also owns the offline retry
-// queue, the dedupe cache, the toolbar badge, and the context menu.
+// Owns the OAuth token, every Sheets call, the retry queue and the badge.
+// Content scripts never touch a token.
 importScripts("shared/utils.js");
-const U = globalThis.HS2S;
+const U = globalThis.GHOSTED;
 
 const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
-const RETRY_ALARM = "hs2s-retry";
+const RETRY_ALARM = "ghosted-retry";
 
-// ── Settings / storage helpers ──────────────────────────────────────────
 function getSettings() {
   return chrome.storage.sync.get(U.DEFAULT_SETTINGS);
 }
@@ -17,7 +15,6 @@ async function getLocal(key, fallback) {
   return o[key];
 }
 
-// ── Auth ────────────────────────────────────────────────────────────────
 function getToken(interactive) {
   return new Promise((resolve, reject) => {
     chrome.identity.getAuthToken({ interactive }, (token) => {
@@ -34,13 +31,18 @@ function removeCachedToken(token) {
   return new Promise((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve));
 }
 
-// Fetch against the Sheets API with automatic 401 → invalidate → retry once.
+// Access tokens last an hour, so a 401 usually just means "stale" — drop it
+// and retry once before bothering the user.
 async function sheetsFetch(url, options = {}, { interactive = false } = {}) {
   let token = await getToken(interactive);
   const doFetch = (t) =>
     fetch(url, {
       ...options,
-      headers: { ...(options.headers || {}), Authorization: `Bearer ${t}`, "Content-Type": "application/json" },
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${t}`,
+        "Content-Type": "application/json",
+      },
     });
 
   let resp = await doFetch(token);
@@ -52,18 +54,27 @@ async function sheetsFetch(url, options = {}, { interactive = false } = {}) {
   return resp;
 }
 
-// ── Sheets operations ───────────────────────────────────────────────────
+// Sheet names can contain spaces and quotes; both need escaping in an A1 range.
 function rangeFor(sheetName, cells) {
   return encodeURIComponent(`'${sheetName.replace(/'/g, "''")}'!${cells}`);
+}
+
+async function errorDetail(resp) {
+  try {
+    return (await resp.json())?.error?.message || "";
+  } catch {
+    return "";
+  }
 }
 
 async function appendRow(row, { interactive = false } = {}) {
   const settings = await getSettings();
   if (!settings.spreadsheetId) {
     const err = new Error("No spreadsheet configured — open the extension options");
-    err.retryable = true; // succeeds once the user configures it
+    err.retryable = true;
     throw err;
   }
+
   const url =
     `${SHEETS_BASE}/${settings.spreadsheetId}/values/${rangeFor(settings.sheetName, "A:O")}:append` +
     `?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`;
@@ -75,20 +86,15 @@ async function appendRow(row, { interactive = false } = {}) {
   );
 
   if (!resp.ok) {
-    let detail = "";
-    try {
-      detail = (await resp.json())?.error?.message || "";
-    } catch { /* non-JSON error body */ }
+    const detail = await errorDetail(resp);
     const err = new Error(`Sheets API ${resp.status}: ${detail || resp.statusText}`);
-    // 429 (quota) and 5xx are transient; 4xx config errors still get queued
-    // by the caller so the row is never lost, but retry slower.
     err.retryable = resp.status === 429 || resp.status >= 500;
     throw err;
   }
 }
 
-// Read the header row; write it if the tab is empty; report a mismatch
-// (without overwriting) if headers exist but differ from the schema.
+// Writes the header if the tab is empty, reports a mismatch otherwise. Never
+// overwrites an existing header row.
 async function verifySheet({ interactive = true } = {}) {
   const settings = await getSettings();
   if (!settings.spreadsheetId) return { ok: false, error: "No spreadsheet configured" };
@@ -96,8 +102,7 @@ async function verifySheet({ interactive = true } = {}) {
   const getUrl = `${SHEETS_BASE}/${settings.spreadsheetId}/values/${rangeFor(settings.sheetName, "1:1")}`;
   const resp = await sheetsFetch(getUrl, {}, { interactive });
   if (!resp.ok) {
-    const detail = (await resp.json().catch(() => null))?.error?.message || resp.statusText;
-    return { ok: false, error: `Sheets API ${resp.status}: ${detail}` };
+    return { ok: false, error: `Sheets API ${resp.status}: ${(await errorDetail(resp)) || resp.statusText}` };
   }
 
   const existing = (await resp.json()).values?.[0] || [];
@@ -120,7 +125,6 @@ async function verifySheet({ interactive = true } = {}) {
   return matches ? { ok: true, header: "ok" } : { ok: true, header: "mismatch", existing };
 }
 
-// ── Dedupe cache ────────────────────────────────────────────────────────
 async function checkDuplicate(jobId) {
   if (!jobId) return { duplicate: false };
   const logged = await getLocal("loggedJobs", {});
@@ -131,10 +135,9 @@ async function recordLogged(jobId) {
   if (!jobId) return;
   const logged = await getLocal("loggedJobs", {});
   logged[jobId] = U.todayISO();
-  await chrome.storage.local.set({ loggedJobs: logged });
+  await chrome.storage.local.set({ loggedJobs: U.pruneLoggedJobs(logged) });
 }
 
-// ── Retry queue ─────────────────────────────────────────────────────────
 async function updateBadge() {
   const queue = await getLocal("queue", []);
   await chrome.action.setBadgeText({ text: queue.length ? String(queue.length) : "" });
@@ -169,9 +172,7 @@ async function processQueue({ ignoreBackoff = false } = {}) {
       await recordLogged(item.jobId);
     } catch (e) {
       item.attempts += 1;
-      // Exponential backoff: 1, 2, 4, … capped at 60 minutes.
-      const delayMin = Math.min(60, 2 ** item.attempts);
-      item.nextAt = Date.now() + delayMin * 60_000;
+      item.nextAt = Date.now() + Math.min(60, 2 ** item.attempts) * 60_000;
       item.lastError = e.message;
       remaining.push(item);
     }
@@ -183,14 +184,20 @@ async function processQueue({ ignoreBackoff = false } = {}) {
   return { remaining: remaining.length };
 }
 
+function resumeRetries() {
+  updateBadge();
+  getLocal("queue", []).then((q) => {
+    if (q.length) chrome.alarms.create(RETRY_ALARM, { periodInMinutes: 1 });
+  });
+}
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === RETRY_ALARM) processQueue();
 });
 
-// ── Lifecycle: context menu, badge, resume retries ──────────────────────
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
-    id: "hs2s-log",
+    id: "ghosted-log",
     title: "Log this job to Google Sheet",
     contexts: ["page"],
     documentUrlPatterns: [
@@ -199,26 +206,17 @@ chrome.runtime.onInstalled.addListener(() => {
       "https://*.joinhandshake.de/*",
     ],
   });
-  updateBadge();
-  getLocal("queue", []).then((q) => {
-    if (q.length) chrome.alarms.create(RETRY_ALARM, { periodInMinutes: 1 });
-  });
+  resumeRetries();
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  updateBadge();
-  getLocal("queue", []).then((q) => {
-    if (q.length) chrome.alarms.create(RETRY_ALARM, { periodInMinutes: 1 });
-  });
-});
+chrome.runtime.onStartup.addListener(resumeRetries);
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === "hs2s-log" && tab?.id) {
+  if (info.menuItemId === "ghosted-log" && tab?.id) {
     chrome.tabs.sendMessage(tab.id, { type: "openLogOverlay" }).catch(() => {});
   }
 });
 
-// ── Message router ──────────────────────────────────────────────────────
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
@@ -231,25 +229,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           if (dup.duplicate) return { ok: false, duplicate: true, date: dup.date };
         }
         try {
-          // Saving is user-initiated, so an interactive auth prompt is OK here.
+          // User pressed save, so an auth prompt here is expected.
           await appendRow(msg.row, { interactive: true });
           await recordLogged(msg.jobId);
           return { ok: true };
         } catch (e) {
-          // Never lose an entry: queue on any failure and retry on a timer.
+          // Queue on *any* failure. Losing a row the user already filled in is
+          // worse than a delayed write.
           await enqueue(msg.row, msg.jobId);
           return { ok: false, queued: true, error: e.message };
         }
       }
 
-      case "connectGoogle": {
+      case "connectGoogle":
         try {
           await getToken(true);
           return await verifySheet({ interactive: true });
         } catch (e) {
           return { ok: false, error: e.message };
         }
-      }
 
       case "verifySheet":
         try {
@@ -270,5 +268,5 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return { error: `Unknown message type: ${msg?.type}` };
     }
   })().then(sendResponse);
-  return true; // async response
+  return true;
 });

@@ -1,10 +1,9 @@
-// Runs in the page's MAIN world (see manifest). Handshake is a React SPA, so
-// navigations happen via history.pushState/replaceState with no page load.
-// We patch both and dispatch a DOM event that the isolated-world content
-// script listens for. No data crosses worlds — the listener reads
-// location.href itself.
+// Runs in the page's MAIN world so it can see the real History object.
+// Handshake is a React SPA — most navigation is pushState with no page load,
+// which the content script would otherwise miss entirely.
 (() => {
-  const fire = () => window.dispatchEvent(new Event("hs2s:urlchange"));
+  const fire = () => window.dispatchEvent(new Event("ghosted:urlchange"));
+
   for (const method of ["pushState", "replaceState"]) {
     const original = history[method];
     history[method] = function (...args) {
@@ -13,5 +12,6 @@
       return result;
     };
   }
+
   window.addEventListener("popstate", fire);
 })();

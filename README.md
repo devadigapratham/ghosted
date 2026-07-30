@@ -1,206 +1,217 @@
-# Handshake → Google Sheets Job Application Tracker
+# Ghosted 👻
 
-A Chrome extension (Manifest V3) that logs every job you apply to on
-[Handshake](https://joinhandshake.com) into a Google Sheet. When you submit an
-application (or click an external-apply link), it scrapes the job details,
-shows a quick confirmation popup for the manual fields, and appends one row to
-your sheet via the Google Sheets API.
+Logs every job you apply to on Handshake into a Google Sheet, so you know
+exactly who ghosted you.
 
-## Sheet schema
+Apply to something on [Handshake](https://joinhandshake.com) and a small
+confirmation box pops up with the job details already filled in. Add the two or
+three things it can't know (which role bucket, whether you had a connection
+there), hit Enter, and it appends a row to your sheet. That's the whole product.
 
-Rows are appended in this exact column order (A–O):
+## The sheet
+
+One row per application, columns A–O:
 
 `Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word`
 
-On first connect, the extension reads your tab's header row. If the tab is
-empty it writes the header for you; if headers exist but don't match, it warns
-you in the options page and never overwrites anything.
+The first time you connect, it reads row 1 of your tab. Empty tab, and it
+writes the header for you. Existing headers that don't match, and it tells you
+what's different and refuses to touch anything.
 
-## Project layout
+## Setup
+
+You need a Google Cloud OAuth client to talk to the Sheets API. It's free and
+takes about five minutes, but there's no way around it — Google won't hand out
+sheet access without one.
+
+### 1. Load the extension
+
+`chrome://extensions` → turn on **Developer mode** (top right) → **Load
+unpacked** → pick this folder.
+
+The extension ID is pinned in `manifest.json`, so it's always:
 
 ```
-manifest.json          — MV3 manifest (paste your OAuth client ID here)
-background.js          — service worker: OAuth, Sheets API, retry queue, badge, context menu
-shared/utils.js        — schema, date normalization, sanitization (used by both contexts)
-content/urlwatch.js    — MAIN-world script: hooks pushState/replaceState for SPA navigation
-content/selectors.js   — ALL Handshake DOM selectors/patterns (edit here when Handshake changes)
-content/content.js     — detection, scraping, confirmation overlay, floating button
-options/               — options page (sheet config, Google connect, role options, toggles)
-popup/                 — toolbar popup (manual log trigger, retry queue status)
-icons/                 — generated PNGs (16/32/48/128) — do not hand-edit
-tools/make-icons.js    — regenerates icons/ (`npm run icons`), no dependencies
-test/utils.test.js     — unit tests for shared/utils.js (`npm test`)
+lkfokghblcgjphlkjlfpfgcdhpbfdldp
 ```
 
----
+That matters because the OAuth client is tied to the ID. Pinning it means you
+can move this folder, reinstall, or clone it on another machine without redoing
+step 2. If you loaded the extension before this ID was pinned, hit the reload
+(↻) icon on the card and check that the ID now matches the string above.
 
-## One-time setup
+### 2. Make the Google Cloud project
 
-### Step 1 — Load the unpacked extension (to get your extension ID)
+1. Go to <https://console.cloud.google.com/> and sign in with the account that
+   owns the spreadsheet.
+2. Project dropdown in the top bar → **New Project**. Name it whatever
+   ("Ghosted" works). Create it, then make sure it's the selected project.
+3. **APIs & Services → Library**, search for **Google Sheets API**, open it,
+   click **Enable**.
+4. **APIs & Services → OAuth consent screen**. Pick **External** → Create.
+   Fill in the app name and your email where required, then save through the
+   rest of the screens.
+   - On the **Test users** screen, add your own Google address. Skip this and
+     sign-in gets blocked, because the app is in "Testing" status.
+5. **APIs & Services → Credentials → Create Credentials → OAuth client ID**.
+   - Application type: **Chrome Extension**
+   - Item ID: `lkfokghblcgjphlkjlfpfgcdhpbfdldp`
+   - Create. Copy the **Client ID** it shows you (ends in
+     `.apps.googleusercontent.com`).
 
-1. Open `chrome://extensions` in Chrome.
-2. Turn on **Developer mode** (toggle in the top-right corner).
-3. Click **Load unpacked** (top-left) and select this project folder.
-4. The extension card appears. Copy the **ID** shown on the card (a 32-character
-   string like `abcdefghijklmnopqrstuvwxyzabcdef`) — you'll need it in Step 2.
+### 3. Paste the client ID in
 
-> ⚠ The extension ID changes if you move the folder. If you want a stable ID
-> across machines, add a `"key"` field to `manifest.json` (Chrome docs:
-> "Keep a consistent extension ID").
-
-### Step 2 — Create a Google Cloud project and OAuth client
-
-1. Go to <https://console.cloud.google.com/> and sign in with the Google
-   account that owns your tracking spreadsheet.
-2. Click the project dropdown (top bar, left of the search box) → **New
-   Project**. Name it anything (e.g. "Handshake Tracker") and click **Create**.
-   Make sure it's selected.
-3. **Enable the Sheets API**: in the left sidebar go to **APIs & Services →
-   Library**, search for **Google Sheets API**, open it, click **Enable**.
-4. **Configure the consent screen**: **APIs & Services → OAuth consent
-   screen**. Choose **External**, click **Create**. Fill in only the required
-   fields (app name, your email twice), then **Save and Continue** through the
-   remaining screens. On the "Test users" screen, **add your own Google email
-   as a test user** — otherwise sign-in will be blocked while the app is in
-   "Testing" status.
-5. **Create the OAuth client**: **APIs & Services → Credentials → Create
-   Credentials → OAuth client ID**.
-   - Application type: **Chrome Extension**.
-   - Item ID: paste the **extension ID** from Step 1.
-   - Click **Create**. A dialog shows your **Client ID** (ends with
-     `.apps.googleusercontent.com`). Copy it.
-
-### Step 3 — Paste the client ID into the manifest
-
-Open `manifest.json` and replace the placeholder:
+In `manifest.json`, replace the placeholder:
 
 ```json
 "oauth2": {
-  "client_id": "1234567890-xxxxxxxx.apps.googleusercontent.com",
+  "client_id": "1234567890-abcdefg.apps.googleusercontent.com",
   "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
 }
 ```
 
-Back on `chrome://extensions`, click the **reload** (↻) icon on the extension
-card.
+Then go back to `chrome://extensions` and hit reload (↻) on the card. The
+manifest is only read at load time, so skipping the reload means the old
+placeholder is still live.
 
-### Step 4 — Configure the sheet
+### 4. Point it at your sheet
 
-1. Click the extension's toolbar icon → **⚙ Options** (or right-click the icon
-   → Options).
-2. Paste your spreadsheet's **full URL** (the ID is parsed out automatically)
-   and the **tab name** (e.g. `Sheet1` or `Applications`).
-3. Adjust the **Role dropdown options** and the auto-capture toggle if desired.
-4. Click **Connect Google & verify sheet**. A Google sign-in window opens —
-   approve the Sheets permission. The status line then reports one of:
-   - *headers verified* — you're done;
-   - *header row written* — the tab was empty and the schema header was added;
-   - *headers don't match* — fix the sheet manually (nothing is overwritten).
+Click the ghost in the toolbar → **⚙ Options**.
 
----
+1. Paste your spreadsheet URL (the ID gets parsed out of it) and the tab name,
+   e.g. `Sheet1` or `Applications`.
+2. Edit the **Role dropdown options** to whatever buckets you actually use.
+3. Click **Connect Google & verify sheet**. A Google window opens — approve the
+   Sheets permission. You'll see an "unverified app" warning, which is expected
+   for a personal OAuth client; continue past it.
+
+The status line then says one of:
+
+- **headers verified** — done, go apply to something.
+- **header row written** — the tab was empty, so it wrote the header for you.
+- **headers don't match** — it lists expected vs. found. Fix the sheet by hand;
+  nothing was overwritten.
+
+### 5. Check the scraping before you trust it
+
+Worth doing once, and it costs nothing. Open any Handshake job page and click
+the floating **＋ Log this job** button. The overlay opens with everything it
+managed to scrape. Press **Esc** and nothing is saved anywhere.
+
+Anything highlighted amber is a selector that needs fixing for your school's
+Handshake. See "When Handshake changes" below. Try it on three or four
+different jobs — one remote, one with no salary listed — before relying on
+automatic capture.
 
 ## Daily use
 
-- **Automatic**: apply to a job on Handshake. When the success confirmation
-  appears (or you click an external-apply link), the confirmation overlay pops
-  up pre-filled. Fill in Role / Connections? / Résumé Form? / Notes, press
-  **Enter** to save or **Esc** to skip. Fields that failed to scrape are
-  highlighted in amber.
-- **Manual**: use the floating **＋ Log this job** button on any job page, the
-  right-click context menu, or the toolbar popup.
-- **Offline / errors**: rows that fail to save are queued in
-  `chrome.storage.local` and retried automatically with exponential backoff
-  (1 → 2 → 4 … capped at 60 minutes). A badge on the toolbar icon shows the
-  queue count; you can force a retry from the popup or options page.
-- **Duplicates**: each logged Handshake job ID is cached. Logging the same job
-  again shows a warning banner in the overlay ("Save anyway").
+**Automatic.** Apply to a job. When the confirmation appears (or you click an
+external-apply link), the overlay pops up pre-filled. Fill in Role,
+Connections?, Résumé Form?, Notes. Enter saves, Esc skips. Amber fields are
+ones it couldn't scrape.
 
-## Updating selectors when Handshake changes
+**Manual.** The floating **＋ Log this job** button on any job page, the
+right-click menu, or the toolbar popup.
 
-All DOM selectors and text patterns live in **`content/selectors.js`** — job
-title, company, location, salary, posted date, success-toast text, external
-apply link text, etc. Each field has an ordered list of strategies (stable
-`data-hook`/`data-testid` attributes first, generic fallbacks last), and
-`content/content.js` additionally tries `application/ld+json` JobPosting
-structured data before touching any CSS selector.
+**Offline.** Rows that fail to save go into a queue in local storage and retry
+on their own with backoff (1, 2, 4 … up to an hour). The toolbar badge shows
+how many are waiting. You can force a retry from the popup or the options page.
+A row you filled in never gets thrown away, even if the save fails.
+
+**Duplicates.** Every logged job ID is remembered for a year. Log the same job
+twice and the overlay warns you, with the button changing to "Save anyway".
+
+## When Handshake changes
+
+Everything Handshake-specific is in `content/selectors.js` — job title,
+company, location, salary, posted date, the success-toast wording, the
+external-apply link text. Each field is an ordered list, most reliable first.
+`content/content.js` also checks for `application/ld+json` JobPosting data
+before it touches a CSS selector at all.
 
 If a field stops scraping:
 
-1. Open a Handshake job page, right-click the value → **Inspect**.
-2. Look for a `data-hook` or `data-testid` attribute on or near the element,
-   and add it to the **front** of the relevant list in `selectors.js`.
-3. Reload the extension and re-test. No other file should need changes.
+1. Open a job page, right-click the value that's missing, **Inspect**.
+2. Look for a `data-hook` or `data-testid` on or near the element and add it to
+   the **front** of the matching list in `selectors.js`.
+3. Reload the extension, then re-test with the ＋ button.
 
-## Privacy / security notes
+Nothing else should need touching.
 
-- OAuth tokens live only in the background service worker; content scripts
-  never see them.
-- The only Google scope requested is `spreadsheets` (no Drive access).
-- Scraped strings are trimmed and any leading `=` `+` `-` `@` is escaped with
-  a `'` before writing, so a malicious job title can't inject a formula into
-  your sheet.
+## Layout
 
-## Works with any university
+```
+manifest.json          MV3 manifest (paste your OAuth client ID here)
+background.js          service worker: OAuth, Sheets calls, retry queue, badge
+shared/utils.js        schema, date parsing, sanitization — used by both sides
+content/urlwatch.js    MAIN-world script, hooks pushState for SPA navigation
+content/selectors.js   every Handshake selector, all in one place
+content/content.js     detection, scraping, the confirmation overlay
+options/               sheet config, Google connect, role options
+popup/                 toolbar popup: manual log, queue status
+icons/                 generated, don't hand-edit
+tools/make-icons.js    regenerates icons/ (npm run icons)
+test/utils.test.js     unit tests (npm test)
+```
 
-Nothing in the extension is school-specific. The content scripts match
-`https://*.joinhandshake.com/*` (which covers `app.joinhandshake.com` and
-every school subdomain like `myschool.joinhandshake.com`) plus Handshake's
-international domains `joinhandshake.co.uk` and `joinhandshake.de`. The
-scraping logic targets Handshake's product DOM, which is the same across
-universities.
-
-## Distributing / open-sourcing notes
-
-The one per-user friction point is Google OAuth. `chrome.identity.getAuthToken`
-requires an OAuth client whose "Item ID" matches the installed extension's ID,
-and unpacked installs get a **different ID on every machine**. Two ways to
-distribute:
-
-1. **Developer-style (current default)** — each user follows the README to
-   create their own free Google Cloud project + Chrome-extension OAuth client
-   and pastes the client ID into `manifest.json`. Client IDs are not secrets,
-   but per-user clients mean no shared quota and no verification hassle.
-2. **Chrome Web Store (recommended once public)** — publish the extension, which
-   gives every install the **same** extension ID. Then the maintainer creates
-   one OAuth client for that ID, ships it in `manifest.json`, and users just
-   click "Connect Google". Caveats:
-   - The `spreadsheets` scope is classified **sensitive**, so the OAuth consent
-     screen must go through Google's verification to serve more than 100 users;
-     until then it's limited to accounts added as "Test users" and shows an
-     "unverified app" warning.
-   - If you want a stable extension ID for contributors' unpacked dev installs,
-     pin a `"key"` in `manifest.json` (see Chrome docs: "Keep a consistent
-     extension ID") so their local builds match the store ID and the shared
-     OAuth client works in development too.
-
-Do **not** commit any real spreadsheet IDs; user config lives in
-`chrome.storage.sync`, never in the repo.
-
-Licensed under the [MIT License](LICENSE).
-
-## Testing
-
-Unit tests cover the pure logic in `shared/utils.js` — date normalization,
-formula-injection escaping, spreadsheet-ID parsing, and column ordering. They
-need no dependencies and no network:
+## Tests
 
 ```sh
 npm test
 ```
 
-The browser-dependent behavior (scraping, submission detection, OAuth, the
-retry queue) is covered by the manual matrix in [TESTPLAN.md](TESTPLAN.md) —
-native apply, external apply, offline retry, duplicates, token expiry, missing
-fields.
+74 tests over the pure logic in `shared/utils.js`: date normalization, formula
+escaping, spreadsheet ID parsing, column ordering, dedupe pruning. No
+dependencies, no network, no browser.
 
-## Regenerating the icons
+Everything that needs a real browser — scraping, submission detection, OAuth,
+the retry queue — is in [TESTPLAN.md](TESTPLAN.md) as a manual checklist.
 
-`icons/*.png` are generated, not hand-drawn. Edit the palette or geometry
-constants at the top of `tools/make-icons.js` and run:
+## Icons
+
+`icons/*.png` are generated, not drawn. Edit the constants at the top of
+`tools/make-icons.js` and run `npm run icons`. It rasterizes the ghost into a
+supersampled buffer and writes PNGs using only `node:zlib`.
+
+## Privacy
+
+- OAuth tokens live in the service worker. Content scripts never see one.
+- The only scope requested is `spreadsheets`. No Drive access, so it can't see
+  any of your other files.
+- Scraped text is trimmed, and a leading `=` `+` `-` `@` gets an apostrophe
+  before it's written, so a job title can't inject a formula into your sheet.
+
+## Any university
+
+Nothing here is school-specific. The content scripts match
+`https://*.joinhandshake.com/*`, which covers `app.joinhandshake.com` and every
+school subdomain, plus `joinhandshake.co.uk` and `joinhandshake.de`. The
+scraping targets Handshake's own DOM, which is the same everywhere.
+
+## If you fork this
+
+The friction point is OAuth. `chrome.identity.getAuthToken` needs a client
+whose Item ID matches the installed extension.
+
+Because the public key is pinned in `manifest.json`, every unpacked install of
+this repo gets the same ID, so one OAuth client works across your machines. A
+fork that wants its own identity should generate a new key:
 
 ```sh
-npm run icons
+openssl genrsa -out key.pem 2048
+openssl rsa -in key.pem -pubout -outform DER | openssl base64 -A
 ```
 
-The script has no dependencies — it rasterizes the shapes into a supersampled
-buffer and writes PNGs using only `node:zlib`.
+Put that base64 string in the manifest's `key` field. `key.pem` itself is
+gitignored and only needed if you ever pack a `.crx` — the `key` field alone is
+what fixes the ID.
+
+Publishing to the Chrome Web Store would give everyone the same ID for free,
+but the `spreadsheets` scope counts as sensitive, so the consent screen needs
+Google's verification before it can serve more than 100 users. Until then it's
+test-users-only with an unverified-app warning.
+
+Don't commit a real spreadsheet ID. Your config lives in `chrome.storage.sync`,
+never in the repo.
+
+MIT licensed. See [LICENSE](LICENSE).

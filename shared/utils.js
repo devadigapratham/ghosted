@@ -1,8 +1,8 @@
-// Shared utilities. Loaded by both the content script (as a content_scripts
-// entry) and the background service worker (via importScripts).
+// Loaded twice: as a content script entry, and via importScripts() in the
+// worker. Hence the IIFE + globalThis instead of real modules.
 (() => {
-  // The exact sheet schema, in column order (A..O). Row objects are keyed by
-  // these names everywhere in the extension.
+  // Column order is the sheet's column order (A..O). Row objects are keyed by
+  // these strings everywhere.
   const COLUMNS = [
     "Position",
     "Company",
@@ -28,11 +28,15 @@
     autoCapture: true,
   };
 
-  function pad2(n) {
-    return String(n).padStart(2, "0");
-  }
+  // How long a logged job stays in the dedupe cache, and a hard cap so the
+  // cache can't grow without bound.
+  const DEDUPE_MAX_AGE_DAYS = 365;
+  const DEDUPE_MAX_ENTRIES = 750;
 
-  // Local-timezone YYYY-MM-DD (toISOString would shift across UTC midnight).
+  const pad2 = (n) => String(n).padStart(2, "0");
+
+  // Local time, not UTC — toISOString() would shift the date either side of
+  // midnight depending on the timezone.
   function toISODate(d) {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
   }
@@ -41,18 +45,24 @@
     return toISODate(new Date());
   }
 
-  // Normalize a scraped posted-date string to YYYY-MM-DD.
-  // Handles relative forms ("Posted 3 days ago", "2 weeks ago", "yesterday"),
-  // ISO dates, and absolute forms ("Jul 5", "July 5, 2026").
-  // Returns "" if it can't be parsed — never guesses.
+  function daysBetween(isoA, isoB) {
+    const a = new Date(`${isoA}T00:00:00`);
+    const b = new Date(`${isoB}T00:00:00`);
+    if (isNaN(a) || isNaN(b)) return 0;
+    return Math.round((b - a) / 86_400_000);
+  }
+
+  // Turns whatever Handshake shows into YYYY-MM-DD. Returns "" rather than
+  // guessing, so the overlay can flag the field instead of writing junk.
   function parsePostedDate(text, now = new Date()) {
     if (!text) return "";
-    let t = String(text)
+    const t = String(text)
       .replace(/\s+/g, " ")
       .replace(/^(posted|date posted)[:\s]*/i, "")
       .trim();
     if (!t) return "";
 
+    // Already machine-readable (JSON-LD, <time datetime>). Trusted as-is.
     if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
 
     const lower = t.toLowerCase();
@@ -75,23 +85,20 @@
       return toISODate(d);
     }
 
-    // Absolute dates: "July 5, 2026", "Jul 5", "5 July", "7/5/2026".
-    // Month+day with no year must be handled BEFORE new Date(t): V8's lenient
-    // parser silently resolves "Jul 5" to the year 2001 rather than failing,
-    // so testing for NaN afterwards would never catch it.
+    // Month+day with no year has to be caught before new Date(): V8 resolves
+    // "Jul 5" to the year 2001 instead of failing, so an isNaN() check after
+    // the fact never fires.
     let parsed;
     if (/^[a-z]+\.? \d{1,2}$/i.test(t) || /^\d{1,2} [a-z]+\.?$/i.test(t)) {
       parsed = new Date(`${t.replace(/\./g, "")}, ${now.getFullYear()}`);
-      // Posted dates are in the past; if that lands in the future, it was last year.
       if (!isNaN(parsed) && parsed > now) parsed.setFullYear(parsed.getFullYear() - 1);
     } else {
       parsed = new Date(t);
     }
     if (isNaN(parsed)) return "";
 
-    // Sanity window: a posted date can't be in the future or absurdly old.
-    // This also catches other lenient-parse surprises (bare "5 Jul" style
-    // strings that V8 resolves to 2001) rather than writing a wrong date.
+    // Nothing was posted in the future or five years ago. Catches the rest of
+    // V8's lenient-parsing surprises.
     const oldest = new Date(now);
     oldest.setFullYear(oldest.getFullYear() - 5);
     const newest = new Date(now);
@@ -101,8 +108,8 @@
     return toISODate(parsed);
   }
 
-  // Trim, collapse whitespace/newlines, and neutralize formula injection
-  // (leading = + - @ gets a leading apostrophe, which Sheets treats as text).
+  // Leading = + - @ would make Sheets evaluate the cell, so a job title of
+  // "=IMPORTRANGE(...)" gets an apostrophe and stays text.
   function sanitizeCell(value) {
     let s = String(value ?? "")
       .replace(/[\r\n]+/g, " ")
@@ -112,14 +119,10 @@
     return s;
   }
 
-  // Convert a row object (keyed by column names) into an ordered,
-  // sanitized array of 15 cells.
   function rowToValues(row) {
     return COLUMNS.map((col) => sanitizeCell(row[col]));
   }
 
-  // Extract a spreadsheet ID from a full Sheets URL, or return the input
-  // unchanged if it already looks like a bare ID.
   function parseSpreadsheetId(input) {
     const s = String(input || "").trim();
     const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -128,14 +131,31 @@
     return "";
   }
 
-  globalThis.HS2S = {
+  // Drops entries past DEDUPE_MAX_AGE_DAYS, then trims oldest-first if still
+  // over the cap. Returns a new object.
+  function pruneLoggedJobs(logged, today = todayISO()) {
+    const entries = Object.entries(logged || {}).filter(
+      ([, date]) => daysBetween(date, today) <= DEDUPE_MAX_AGE_DAYS
+    );
+    if (entries.length > DEDUPE_MAX_ENTRIES) {
+      entries.sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+      entries.splice(0, entries.length - DEDUPE_MAX_ENTRIES);
+    }
+    return Object.fromEntries(entries);
+  }
+
+  globalThis.GHOSTED = {
     COLUMNS,
     DEFAULT_SETTINGS,
+    DEDUPE_MAX_AGE_DAYS,
+    DEDUPE_MAX_ENTRIES,
     toISODate,
     todayISO,
+    daysBetween,
     parsePostedDate,
     sanitizeCell,
     rowToValues,
     parseSpreadsheetId,
+    pruneLoggedJobs,
   };
 })();
