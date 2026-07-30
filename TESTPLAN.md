@@ -262,7 +262,7 @@ The default path. Run this with the sheet fields left blank.
 ## 22. Hosted dashboard
 
 1. `npm run serve`, open `http://localhost:8731/`. Expect the landing page.
-2. Open `/app/app.html`. Expect the dashboard, the badge reading "stored in this
+2. Open `/app/index.html`. Expect the dashboard, the badge reading "stored in this
    browser", and Settings to hide the Sheets, Capture and Follow-ups sections.
 3. Import a CSV exported from the extension. Expect the dashboard to populate.
 4. Change a status, reload the page. Expect it to persist.

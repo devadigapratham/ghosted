@@ -90,7 +90,7 @@
     }
   },
   "options_ui": {
-    "page": "app/app.html",
+    "page": "app/index.html",
     "open_in_tab": true
   },
   "oauth2": {

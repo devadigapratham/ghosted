@@ -58,7 +58,7 @@ not in the registry are still loggable on demand: the popup injects the same thr
 scripts into the current tab under `activeTab`.
 
 The dashboard reaches storage only through `app/data-source.js`, which is what
-lets one `app.html` serve three environments.
+lets one `index.html` serve three environments.
 
 ## Trust boundaries
 

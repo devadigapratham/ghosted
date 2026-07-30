@@ -26,7 +26,7 @@ available if you want it, and optional.
 running the tests or regenerating the icons. Installing is downloading a folder
 and pointing Chrome at it.
 
-Want to see what it does first? **[Try the live demo](https://ghosted.vercel.app/app?demo=1)**
+Want to see what it does first? **[Try the live demo](https://ghosted-red.vercel.app/app?demo=1)**
 — the real dashboard on sample data, nothing to install.
 
 ![The live demo running on sample data](docs/demo.jpg)
@@ -257,7 +257,7 @@ extension. Capture, sponsorship scanning, reminders and Sheets sync need the
 extension, because they have to run inside the browser on the job page itself.
 The settings that depend on them hide themselves automatically.
 
-The same `app/app.html`, `app/app.js` and `shared/utils.js` serve both. The only
+The same `app/index.html`, `app/app.js` and `shared/utils.js` serve both. The only
 difference is `app/data-source.js`, which picks a storage backend based on
 whether `chrome.runtime.id` exists.
 
@@ -483,12 +483,12 @@ shared/utils.js        all pure logic, loaded by every context and unit-tested
 content/urlwatch.js    MAIN-world script, hooks pushState for SPA navigation
 content/selectors.js   per-board selectors and the site registry
 content/content.js     detection, scraping, sponsorship chip, confirm overlay
-app/app.html           the dashboard shell, shared by extension and web
+app/index.html         the dashboard shell, shared by extension and web
 app/app.js             views, charts, table, settings
 app/app.css            design tokens and layout
 app/data-source.js     storage backend: worker, localStorage, or demo
 popup/                 toolbar popup: quick log, stats, dashboard launcher
-web/index.html         landing page for the hosted build
+index.html             landing page for the hosted build
 vercel.json            static hosting config and rewrites
 icons/                 generated, don't hand-edit
 tools/make-icons.js    regenerates icons/ (npm run icons)
@@ -639,7 +639,7 @@ delete their entries from `content_scripts.matches` in `manifest.json`; manual
 logging still works everywhere via the popup.
 
 **Can I see it before installing anything?**
-Yes — the [live demo](https://ghosted.vercel.app/app?demo=1) is the real dashboard
+Yes — the [live demo](https://ghosted-red.vercel.app/app?demo=1) is the real dashboard
 on sample data.
 
 **Can I use it on two computers?**

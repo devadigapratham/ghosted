@@ -20,7 +20,7 @@
 <body>
   <h1>Ghosted browser tests</h1>
   <p class="sub">
-    Drives the real <code>/app/app.html</code> in the frame below against real
+    Drives the real <code>/app/index.html</code> in the frame below against real
     <code>localStorage</code>. No production code knows this page exists.
   </p>
   <div id="summary">running…</div>
@@ -91,7 +91,7 @@
     // the same src only changes the hash and no load event fires.
     boots += 1;
     frame.onload = () => setTimeout(resolve, 250); // let the async load() finish
-    frame.src = `/app/app.html?boot=${boots}${hash || ""}`;
+    frame.src = `/app/index.html?boot=${boots}${hash || ""}`;
   });
 
   await load("#dashboard");
