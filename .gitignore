@@ -1,13 +1,11 @@
 # macOS
 .DS_Store
 
-# Node (no runtime deps — this is only for the test/icon tooling)
+# Node (dev tooling only; the extension ships no dependencies)
 node_modules/
 npm-debug.log*
 package-lock.json
 
-# Local editor and tooling settings
-.claude/
 
 # Packaged extension builds
 *.zip
