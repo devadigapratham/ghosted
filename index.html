@@ -13,6 +13,8 @@
       --text: #0b0b0b; --muted: #52514e; --faint: #898781;
       --border: rgba(11,11,11,.10);
       --accent: #1b7f4d; --warn: #d03b3b;
+      /* 6.22:1 on the light page background */
+      --link: #146b3f;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -20,9 +22,15 @@
         --text: #fff; --muted: #c3c2b7; --faint: #898781;
         --border: rgba(255,255,255,.10);
         --accent: #229a5e;
+        /* 7.65:1 on the dark page background; the darker green fails there */
+        --link: #34b877;
       }
     }
     * { box-sizing: border-box; }
+    /* Underlined as well as coloured, so the affordance is not colour alone.
+       :visited is pinned or the browser reverts it to unreadable purple. */
+    a, a:visited { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+    a:hover { text-decoration-thickness: 2px; }
     body {
       margin: 0; background: var(--page); color: var(--text);
       font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -33,12 +41,12 @@
     h1 { font-size: 34px; margin: 0; letter-spacing: -.02em; }
     .tag { font-size: 18px; color: var(--muted); margin: 14px 0 0; }
     .cta { display: flex; gap: 10px; flex-wrap: wrap; margin: 28px 0 0; }
-    a.btn {
+    a.btn, a.btn:visited {
       display: inline-block; padding: 10px 18px; border-radius: 8px;
       text-decoration: none; font-size: 15px; font-weight: 600;
       border: 1px solid var(--border); color: var(--text); background: var(--surface);
     }
-    a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    a.btn.primary, a.btn.primary:visited { background: var(--accent); border-color: var(--accent); color: #fff; }
     a.btn:hover { filter: brightness(1.06); }
     h2 { font-size: 20px; margin: 44px 0 10px; }
     p, li { color: var(--muted); }
@@ -64,7 +72,7 @@
       margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border);
       font-size: 14px; color: var(--faint);
     }
-    footer a { color: var(--muted); }
+    footer a, footer a:visited { color: var(--muted); }
   </style>
 </head>
 <body>

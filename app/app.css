@@ -38,6 +38,7 @@
     --emphasis: #d03b3b;
     --deemphasis: #898781;
     --success-text: #0ca30c;
+    --link: #34b877;
     --accent: #229a5e;
   }
 }
@@ -57,10 +58,14 @@
   --emphasis: #d03b3b;
   --deemphasis: #898781;
   --success-text: #0ca30c;
+  --link: #34b877;
   --accent: #229a5e;
 }
 
 * { box-sizing: border-box; }
+
+/* Base link style, so an unstyled anchor never falls back to the UA blue. */
+a, a:visited { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
 
 /* Must outrank any author display rule on an element we toggle with [hidden]. */
 [hidden] { display: none !important; }
