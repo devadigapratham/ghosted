@@ -6,8 +6,8 @@ node_modules/
 npm-debug.log*
 package-lock.json
 
-# Local Claude Code permissions, not shared
-.claude/settings.local.json
+# Local editor and tooling settings
+.claude/
 
 # Packaged extension builds
 *.zip
