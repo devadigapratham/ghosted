@@ -64,7 +64,7 @@ $("logBtn").addEventListener("click", async () => {
     await chrome.tabs.sendMessage(tab.id, { type: "openLogOverlay" });
     window.close();
   } catch {
-    // No content script listening — the tab predates the last extension reload.
+    // No content script listening; the tab predates the last extension reload.
     $("logBtn").textContent = "Reload the Handshake tab first";
   }
 });

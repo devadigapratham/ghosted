@@ -1123,3 +1123,74 @@ test.describe("needsAttention", () => {
     assert.strictEqual(U.needsAttention(undefined, S, TODAY).length, 0);
   });
 });
+
+test.describe("safeHttpUrl", () => {
+  test("passes http and https through", () => {
+    assert.strictEqual(U.safeHttpUrl("https://example.test/a?b=1"), "https://example.test/a?b=1");
+    assert.strictEqual(U.safeHttpUrl("http://example.test/"), "http://example.test/");
+  });
+
+  test("rejects javascript: URLs", () => {
+    assert.strictEqual(U.safeHttpUrl("javascript:alert(1)"), "");
+    assert.strictEqual(U.safeHttpUrl("JavaScript:alert(1)"), "");
+  });
+
+  test("rejects a javascript: URL smuggled past a naive check with a tab", () => {
+    // The URL parser strips tabs and newlines before the scheme, which is why
+    // this inspects the parsed protocol rather than the raw string.
+    assert.strictEqual(U.safeHttpUrl("java\tscript:alert(1)"), "");
+    assert.strictEqual(U.safeHttpUrl("java\nscript:alert(1)"), "");
+    assert.strictEqual(U.safeHttpUrl("  javascript:alert(1)  "), "");
+  });
+
+  test("rejects data:, vbscript: and file:", () => {
+    assert.strictEqual(U.safeHttpUrl("data:text/html,<script>alert(1)</script>"), "");
+    assert.strictEqual(U.safeHttpUrl("vbscript:msgbox(1)"), "");
+    assert.strictEqual(U.safeHttpUrl("file:///etc/passwd"), "");
+  });
+
+  test("rejects a chrome-extension: URL", () => {
+    assert.strictEqual(U.safeHttpUrl("chrome-extension://abc/app/app.html"), "");
+  });
+
+  test("rejects relative and malformed input", () => {
+    assert.strictEqual(U.safeHttpUrl("//evil.test/x"), "");
+    assert.strictEqual(U.safeHttpUrl("/jobs/1"), "");
+    assert.strictEqual(U.safeHttpUrl("not a url"), "");
+  });
+
+  test("returns \"\" for nullish and empty", () => {
+    assert.strictEqual(U.safeHttpUrl(""), "");
+    assert.strictEqual(U.safeHttpUrl(null), "");
+    assert.strictEqual(U.safeHttpUrl(undefined), "");
+  });
+});
+
+test.describe("import strips unsafe Job URLs", () => {
+  test("a javascript: URL in a CSV does not survive import", () => {
+    const { rows } = U.rowsFromDelimited(
+      "Company,Position,Job URL\nEvil,SWE,javascript:fetch('//evil.test')"
+    );
+    assert.strictEqual(rows[0]["Job URL"], "");
+  });
+
+  test("a javascript: URL in a JSON backup does not survive import", () => {
+    const { rows } = U.rowsFromJSON('[{"Company":"E","Position":"P","Job URL":"javascript:alert(1)"}]');
+    assert.strictEqual(rows[0]["Job URL"], "");
+  });
+
+  test("a legitimate job URL is preserved on import", () => {
+    const { rows } = U.rowsFromDelimited(
+      "Company,Position,Job URL\nAcme,SWE,https://app.joinhandshake.com/jobs/1"
+    );
+    assert.strictEqual(rows[0]["Job URL"], "https://app.joinhandshake.com/jobs/1");
+  });
+
+  test("the rest of the row is untouched by scrubbing", () => {
+    const { rows } = U.rowsFromDelimited(
+      "Company,Position,Job URL\nAcme,SWE Intern,javascript:alert(1)"
+    );
+    assert.strictEqual(rows[0].Company, "Acme");
+    assert.strictEqual(rows[0].Position, "SWE Intern");
+  });
+});

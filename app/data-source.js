@@ -9,7 +9,7 @@
   const U = globalThis.GHOSTED;
   const isExtension = Boolean(globalThis.chrome?.runtime?.id);
 
-  // ── Extension ──
+  // Extension
   function extensionSource() {
     const ask = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
 
@@ -38,7 +38,7 @@
     };
   }
 
-  // ── Web ──
+  // Web
   function webSource() {
     const KEY = { apps: "ghosted.applications", settings: "ghosted.settings", theme: "ghosted.theme" };
 

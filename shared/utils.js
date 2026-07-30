@@ -82,7 +82,7 @@
 
   const pad2 = (n) => String(n).padStart(2, "0");
 
-  // Local time, not UTC — toISOString() would shift the date either side of
+  // Local time, not UTC; toISOString() would shift the date either side of
   // midnight depending on the timezone.
   function toISODate(d) {
     return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -125,7 +125,7 @@
     const d = new Date(`${cleaned}, ${now.getFullYear()}`);
     if (isNaN(d)) return null;
 
-    // Postings are in the past, deadlines are in the future — roll the year
+    // Postings are in the past, deadlines are in the future; roll the year
     // whichever way makes the bare date make sense.
     if (preferFuture && d < now) d.setFullYear(d.getFullYear() + 1);
     if (!preferFuture && d > now) d.setFullYear(d.getFullYear() - 1);
@@ -206,7 +206,7 @@
     return withinWindow(parsed, now, -60, 365 * 2) ? toISODate(parsed) : "";
   }
 
-  // ── Work authorization ──
+  // Work authorization
   // The single most important thing on a posting if you need a visa, and it's
   // always buried in a wall of boilerplate. Most restrictive match wins, so a
   // "we sponsor H-1B" blurb can't override a clearance requirement.
@@ -230,10 +230,10 @@
       status: "No sponsorship",
       patterns: [
         /no (visa |immigration |third[- ]party )?sponsorship/i,
-        // "not able" needs the space alternative — (not|un)able only ever
+        // "not able" needs the space alternative; (not|un)able only ever
         // matched "unable" and "notable".
         /(not\s+|un)able to (provide|offer|support|sponsor)\s*(visa |immigration )?(sponsorship)?/i,
-        // "will not sponsor applicants for work visas" — the object can be
+        // "will not sponsor applicants for work visas"; the object can be
         // several words away from the verb.
         /(will|can|do|does)\s*not\s+(be able to\s+)?(provide|offer|sponsor|support)\b[^.]{0,50}(visa|sponsorship|immigration|work authoriz)/i,
         /(will|can)\s?not\s+sponsor\b/i,
@@ -273,7 +273,7 @@
   }
 
   // Returns { status, evidence }. status is "" when nothing matched, which the
-  // UI shows as "Unclear" — never as good news.
+  // UI shows as "Unclear"; never as good news.
   function classifyWorkAuth(text) {
     if (!text) return { status: "", evidence: "" };
     const chunks = sentences(text);
@@ -338,6 +338,27 @@
     return row;
   }
 
+  // Only http(s) is safe to put in an href. A "javascript:" URL from an imported
+  // file would otherwise run with the extension page's privileges.
+  const SAFE_PROTOCOLS = new Set(["http:", "https:"]);
+
+  function safeHttpUrl(value) {
+    const s = String(value ?? "").trim();
+    if (!s) return "";
+    try {
+      const url = new URL(s);
+      return SAFE_PROTOCOLS.has(url.protocol) ? url.href : "";
+    } catch {
+      return ""; // relative or malformed; nothing we should link to
+    }
+  }
+
+  // Applied to every imported row: the file is untrusted input.
+  function scrubRow(row) {
+    row["Job URL"] = safeHttpUrl(row["Job URL"]);
+    return row;
+  }
+
   function parseSpreadsheetId(input) {
     const s = String(input || "").trim();
     const m = s.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -350,7 +371,7 @@
     return spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` : "";
   }
 
-  // ── Export ──
+  // Export
   // Cells are already sanitized on the way in, so the leading-apostrophe
   // formula guard is preserved here rather than reapplied.
   function escapeDelimited(value, delimiter) {
@@ -373,7 +394,7 @@
   const toCSV = (rows) => toDelimited(rows, ",");
   const toTSV = (rows) => toDelimited(rows, "\t");
 
-  // ── Import ──
+  // Import
   // RFC 4180-ish reader: handles quoted fields containing the delimiter,
   // escaped "" quotes, and CRLF or LF line endings.
   function parseDelimited(text, delimiter) {
@@ -418,7 +439,7 @@
   }
 
   // Maps a delimited export back into row objects. Header order doesn't have to
-  // match ours, and unknown columns are ignored — so a sheet someone rearranged
+  // match ours, and unknown columns are ignored; so a sheet someone rearranged
   // still imports.
   function rowsFromDelimited(text) {
     const table = parseDelimited(text, sniffDelimiter(text));
@@ -437,7 +458,7 @@
       return row;
     });
 
-    return { rows: rows.filter((r) => r.Company || r.Position), error: "" };
+    return { rows: rows.filter((r) => r.Company || r.Position).map(scrubRow), error: "" };
   }
 
   // Also accept a JSON backup (what the export writes) or a bare array.
@@ -458,7 +479,8 @@
         for (const col of COLUMNS) row[col] = String(r[col] ?? "");
         return row;
       })
-      .filter((r) => r.Company || r.Position);
+      .filter((r) => r.Company || r.Position)
+      .map(scrubRow);
     return { rows, error: "" };
   }
 
@@ -495,7 +517,7 @@
     return { merged: [...(existing || []), ...added], added: added.length, skipped };
   }
 
-  // ── Weekly goal ──
+  // Weekly goal
   function weekProgress(rows, target, today = todayISO()) {
     const goal = Math.max(0, Number(target) || 0);
     const start = addDays(today, -6);
@@ -511,7 +533,7 @@
     };
   }
 
-  // ── Needs attention ──
+  // Needs attention
   // One list answering "what should I do right now", newest urgency first.
   function needsAttention(rows, settings = DEFAULT_SETTINGS, today = todayISO()) {
     const ghostAfter = settings.ghostAfterDays ?? DEFAULT_SETTINGS.ghostAfterDays;
@@ -662,6 +684,7 @@
     rowToValues,
     valuesToRow,
     parseSpreadsheetId,
+    safeHttpUrl,
     sheetUrl,
     pruneLoggedJobs,
     summarize,

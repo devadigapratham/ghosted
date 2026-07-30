@@ -45,7 +45,7 @@ const sponsorOf = (row) => {
   return SPONSOR_META[s] ? s : "Unclear";
 };
 
-// ── Data ──
+// Data
 async function load() {
   settings = await DS.getSettings();
   const resp = await DS.getRows();
@@ -102,7 +102,7 @@ function deadlines() {
     .sort((a, b) => String(a.Deadline).localeCompare(String(b.Deadline)));
 }
 
-// ── Dashboard ──
+// Dashboard
 function renderDashboard() {
   const empty = rows.length === 0;
   $("emptyState").hidden = !empty;
@@ -380,7 +380,7 @@ function hideTip() {
   $("tooltip").hidden = true;
 }
 
-// ── Status writing ──
+// Status writing
 function statusSelect(row, onDone) {
   const sel = document.createElement("select");
   for (const opt of U.STATUS_OPTIONS) {
@@ -413,7 +413,7 @@ function alertLine(text) {
   setTimeout(() => load(), 2500);
 }
 
-// ── Pipeline ──
+// Pipeline
 function renderPipeline() {
   const board = $("board");
   board.textContent = "";
@@ -444,7 +444,7 @@ function renderPipeline() {
   }
 }
 
-// ── All jobs table ──
+// All jobs table
 function fillFilterOptions() {
   const fill = (sel, values) => {
     const keep = sel.value;
@@ -516,11 +516,12 @@ function renderJobs() {
     tr.appendChild(td(r["Date Applied"], "num"));
 
     const posTd = el("td", "strong");
-    if (r["Job URL"]) {
+    const href = U.safeHttpUrl(r["Job URL"]);
+    if (href) {
       const a = el("a", "joblink", r.Position || "—");
-      a.href = r["Job URL"];
+      a.href = href;
       a.target = "_blank";
-      a.rel = "noreferrer";
+      a.rel = "noreferrer noopener";
       posTd.appendChild(a);
     } else {
       posTd.textContent = r.Position || "—";
@@ -563,7 +564,7 @@ function renderDeadlines() {
   }));
 }
 
-// ── Needs attention ──
+// Needs attention
 // One list answering "what should I do now", instead of three places to look.
 const ATTENTION_LABEL = {
   deadline: "Deadline",
@@ -589,7 +590,7 @@ function renderAttention() {
   }
 }
 
-// ── Delete with undo ──
+// Delete with undo
 // Deleting the wrong row is easy and a confirm() dialog on every row is worse
 // than an undo, so the row is held for 8 seconds and can be put back.
 let undoTimer;
@@ -623,7 +624,7 @@ $("undoBtn").addEventListener("click", async () => {
   load();
 });
 
-// ── Import ──
+// Import
 function readFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -661,7 +662,7 @@ $("importInput").addEventListener("change", (e) => {
   e.target.value = ""; // let the same file be picked twice
 });
 
-// ── Settings ──
+// Settings
 function fillSettings() {
   // The web build has no worker, so nothing that needs one is shown.
   for (const [cap, id] of [["sheets", "sheetsSection"], ["capture", "captureSection"], ["reminders", "remindersSection"]]) {
@@ -750,7 +751,7 @@ async function refreshQueue() {
   if (resp?.lastError) err.textContent = `Last error: ${resp.lastError}`;
 }
 
-// ── Export ──
+// Export
 function download(name, text, mime) {
   const url = URL.createObjectURL(new Blob([text], { type: mime }));
   const a = document.createElement("a");
@@ -760,7 +761,7 @@ function download(name, text, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-// ── Routing ──
+// Routing
 function show(view) {
   const target = VIEWS.includes(view) ? view : "dashboard";
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== target;
@@ -776,7 +777,7 @@ function currentView() {
 
 window.addEventListener("hashchange", () => show(currentView()));
 
-// ── Theme ──
+// Theme
 async function initTheme() {
   const theme = await DS.getTheme();
   if (theme) document.documentElement.dataset.theme = theme;
@@ -795,7 +796,7 @@ $("themeBtn").addEventListener("click", async () => {
   hideTip();
 });
 
-// ── Wiring ──
+// Wiring
 $("refreshBtn").addEventListener("click", () => load());
 
 $("search").addEventListener("input", (e) => {
@@ -885,7 +886,7 @@ $("clearBtn").addEventListener("click", async () => {
   load();
 });
 
-// ── Keyboard ──
+// Keyboard
 // "/" to search, g+letter to jump, ? for the list. Ignored while typing.
 const GOTO = { d: "dashboard", a: "attention", p: "pipeline", j: "jobs", l: "deadlines", s: "settings" };
 let awaitingGoto = false;

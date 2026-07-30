@@ -20,7 +20,7 @@
   });
 
   // Filled in when the apply modal opens, consumed when submission succeeds.
-  // Scraping has to happen up front — by the time the success toast appears,
+  // Scraping has to happen up front; by the time the success toast appears,
   // the job details behind the modal may already be gone.
   let pendingApp = null;
   let lastUrl = location.href;
@@ -224,7 +224,7 @@
     return { fields, workAuth };
   }
 
-  // ── Sponsorship chip ──
+  // Sponsorship chip
   // Shown before you apply, which is the only time the answer is useful.
   const chipCache = new Map();
   let chip = null;
@@ -295,7 +295,7 @@
       if (S.resume.test(t) && S.resumeUpload.attachedText.test(t)) return "Yes";
     }
 
-    // The step exists but nothing is attached — say so rather than guessing.
+    // The step exists but nothing is attached; say so rather than guessing.
     return S.resume.test(dialog.textContent || "") ? "No" : "";
   }
 
@@ -545,7 +545,7 @@
 
   let overlayEl = null;
 
-  // Fields we try to scrape — these get the amber "couldn't find it" treatment.
+  // Fields we try to scrape; these get the amber "couldn't find it" treatment.
   const AUTO_FIELDS = new Set(["Position", "Company", "Industry", "Location", "Date Posted", "Salary Range"]);
 
   async function triggerLog({ auto, external = false, presetData = null }) {
@@ -568,7 +568,7 @@
           company: scraped.Company,
         });
       } catch {
-        // Worker asleep or reloading — carry on without dupe/company info.
+        // Worker asleep or reloading; carry on without dupe/company info.
       }
     }
 

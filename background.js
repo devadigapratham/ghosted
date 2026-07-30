@@ -8,8 +8,11 @@ const RETRY_ALARM = "ghosted-retry";
 const FOLLOWUP_ALARM = "ghosted-followup";
 const FOLLOWUP_NOTIFICATION = "ghosted-followup-note";
 
-function getSettings() {
-  return chrome.storage.sync.get(U.DEFAULT_SETTINGS);
+async function getSettings() {
+  const settings = await chrome.storage.sync.get(U.DEFAULT_SETTINGS);
+  // Never let anything but a well-formed id reach a request URL.
+  settings.spreadsheetId = U.parseSpreadsheetId(settings.spreadsheetId);
+  return settings;
 }
 
 async function getLocal(key, fallback) {
@@ -33,7 +36,7 @@ function removeCachedToken(token) {
   return new Promise((resolve) => chrome.identity.removeCachedAuthToken({ token }, resolve));
 }
 
-// Access tokens last an hour, so a 401 usually just means "stale" — drop it
+// Access tokens last an hour, so a 401 usually just means "stale"; drop it
 // and retry once before bothering the user.
 async function sheetsFetch(url, options = {}, { interactive = false } = {}) {
   let token = await getToken(interactive);
@@ -338,7 +341,7 @@ async function processQueue({ ignoreBackoff = false } = {}) {
 }
 
 // Once a day, count applications sitting past their follow-up date and say so.
-// Silent on any failure — a background nudge isn't worth an error popup.
+// Silent on any failure; a background nudge isn't worth an error popup.
 async function checkFollowUps() {
   const settings = await getSettings();
   if (!settings.remindersEnabled || !settings.spreadsheetId) return;

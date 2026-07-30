@@ -1,6 +1,6 @@
 // Regenerates icons/icon{16,32,48,128}.png. Run: npm run icons
 //
-// No dependencies — shapes get rasterized into a supersampled buffer, box
+// No dependencies; shapes get rasterized into a supersampled buffer, box
 // averaged down for antialiasing, and written out with node:zlib. Tweak the
 // constants below and re-run.
 const fs = require("node:fs");
