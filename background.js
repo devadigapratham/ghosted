@@ -145,21 +145,68 @@ async function verifySheet({ interactive = true } = {}) {
   return { ok: true, header: "mismatch", existing };
 }
 
-// Pulls the whole sheet back to compute stats. One call, data rows only.
+// Stats come from whichever copy is authoritative: the sheet if one is
+// connected (you edit Status there), otherwise the local log.
 async function readStats({ interactive = false } = {}) {
   const settings = await getSettings();
-  if (!settings.spreadsheetId) return { ok: false, error: "No spreadsheet configured" };
+
+  if (!settings.spreadsheetId) {
+    const apps = await getLocal("applications", []);
+    return { ok: true, source: "local", stats: U.summarize(apps, settings) };
+  }
 
   const url =
     `${SHEETS_BASE}/${settings.spreadsheetId}/values/` +
     `${rangeFor(settings.sheetName, `A2:${U.LAST_COLUMN}`)}`;
   const resp = await sheetsFetch(url, {}, { interactive });
   if (!resp.ok) {
-    return { ok: false, error: `Sheets API ${resp.status}: ${(await errorDetail(resp)) || resp.statusText}` };
+    // Fall back to the local copy rather than showing nothing.
+    const apps = await getLocal("applications", []);
+    return {
+      ok: true,
+      source: "local",
+      stale: `Sheets API ${resp.status}: ${(await errorDetail(resp)) || resp.statusText}`,
+      stats: U.summarize(apps, settings),
+    };
   }
 
   const rows = ((await resp.json()).values || []).map(U.valuesToRow);
-  return { ok: true, stats: U.summarize(rows, settings) };
+  return { ok: true, source: "sheet", stats: U.summarize(rows, settings) };
+}
+
+// The local log is the source of truth. Sheets is a mirror, so a failed sync
+// or no sheet at all never costs you a row.
+async function saveApplication(row) {
+  const apps = await getLocal("applications", []);
+  apps.push({ ...row, id: crypto.randomUUID(), savedAt: Date.now(), synced: false });
+  if (apps.length > U.APPLICATIONS_MAX) apps.splice(0, apps.length - U.APPLICATIONS_MAX);
+  await chrome.storage.local.set({ applications: apps });
+  return apps[apps.length - 1].id;
+}
+
+async function markSynced(id) {
+  if (!id) return;
+  const apps = await getLocal("applications", []);
+  const app = apps.find((a) => a.id === id);
+  if (!app) return;
+  app.synced = true;
+  await chrome.storage.local.set({ applications: apps });
+}
+
+async function updateApplication(id, changes) {
+  const apps = await getLocal("applications", []);
+  const app = apps.find((a) => a.id === id);
+  if (!app) return { ok: false, error: "Not found" };
+  Object.assign(app, changes);
+  await chrome.storage.local.set({ applications: apps });
+  return { ok: true };
+}
+
+async function deleteApplication(id) {
+  const apps = await getLocal("applications", []);
+  const next = apps.filter((a) => a.id !== id);
+  await chrome.storage.local.set({ applications: next });
+  return { ok: true, remaining: next.length };
 }
 
 async function checkDuplicate(jobId) {
@@ -198,9 +245,9 @@ async function updateBadge() {
   await chrome.action.setBadgeBackgroundColor({ color: "#b07d00" });
 }
 
-async function enqueue(row, jobId, company) {
+async function enqueue(row, jobId, company, localId) {
   const queue = await getLocal("queue", []);
-  queue.push({ row, jobId, company, attempts: 0, nextAt: Date.now(), queuedAt: Date.now() });
+  queue.push({ row, jobId, company, localId, attempts: 0, nextAt: Date.now(), queuedAt: Date.now() });
   await chrome.storage.local.set({ queue });
   await updateBadge();
   await chrome.alarms.create(RETRY_ALARM, { periodInMinutes: 1 });
@@ -223,7 +270,7 @@ async function processQueue({ ignoreBackoff = false } = {}) {
     }
     try {
       await appendRow(item.row);
-      await recordLogged(item.jobId, item.company);
+      await markSynced(item.localId);
     } catch (e) {
       item.attempts += 1;
       item.nextAt = Date.now() + Math.min(60, 2 ** item.attempts) * 60_000;
@@ -335,18 +382,45 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           const dup = await checkDuplicate(msg.jobId);
           if (dup.duplicate) return { ok: false, duplicate: true, date: dup.date };
         }
+
+        // Local first, always. Everything after this is a bonus.
+        const localId = await saveApplication(msg.row);
+        await recordLogged(msg.jobId, msg.company);
+
+        const settings = await getSettings();
+        if (!settings.spreadsheetId) return { ok: true, savedLocally: true };
+
         try {
           // User pressed save, so an auth prompt here is expected.
           await appendRow(msg.row, { interactive: true });
-          await recordLogged(msg.jobId, msg.company);
-          return { ok: true };
+          await markSynced(localId);
+          return { ok: true, synced: true };
         } catch (e) {
-          // Queue on *any* failure. Losing a row the user already filled in is
-          // worse than a delayed write.
-          await enqueue(msg.row, msg.jobId, msg.company);
-          return { ok: false, queued: true, error: e.message };
+          // Queue the sync. The row itself is already safe on disk.
+          await enqueue(msg.row, msg.jobId, msg.company, localId);
+          return { ok: true, savedLocally: true, queued: true, error: e.message };
         }
       }
+
+      case "getApplications": {
+        const apps = await getLocal("applications", []);
+        const settings = await getSettings();
+        return {
+          ok: true,
+          applications: U.sortApplications(apps),
+          sheetConnected: Boolean(settings.spreadsheetId),
+        };
+      }
+
+      case "updateApplication":
+        return updateApplication(msg.id, msg.changes || {});
+
+      case "deleteApplication":
+        return deleteApplication(msg.id);
+
+      case "clearApplications":
+        await chrome.storage.local.set({ applications: [] });
+        return { ok: true };
 
       case "connectGoogle":
         try {

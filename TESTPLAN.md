@@ -3,15 +3,16 @@
 For the parts that need a real browser. The pure logic is covered by
 `npm test`.
 
-Before starting: extension loaded, OAuth client configured, options page shows
-"Connected ✓", and a test spreadsheet with the header row.
+Before starting: extension loaded. Most of this needs no Google account —
+applications are saved locally either way. The ones that need a connected sheet
+say so: 11, 14, 18, 20, 24.
 
 Worker logs are at `chrome://extensions` → the card → **service worker**.
 Content script logs show up in the normal page DevTools console.
 
-Suggested order — cheapest and most reversible first: 4 (manual triggers), 6
-(sponsorship), 16 (sheet verification), 18 (formula injection), 12 (offline
-queue), 13 (duplicates), then 1 and 3 which need real applications, and 14 last
+Suggested order — cheapest and most reversible first: 4 (manual triggers), 12
+(local mode), 6 (sponsorship), 13 (export), 22 (formula injection), 16 (offline
+queue), 17 (duplicates), then 1 and 3 which need real applications, and 18 last
 since it revokes access.
 
 ## 1. Native apply
@@ -21,8 +22,8 @@ since it revokes access.
    Date Applied is today, Status is "Applied", Latest word is "Application
    submitted YYYY-MM-DD". If the modal had a cover-letter step, that dropdown
    is "Yes".
-3. Fill Role, press **Enter**. Expect a "✓ Saved to Google Sheet" toast and a
-   correctly ordered row.
+3. Fill Role, press **Enter**. Expect a "✓ Saved" toast ("✓ Saved to Google
+   Sheet" if you've connected one) and a correctly ordered row.
 4. On a different job, press **Esc** instead. Expect: overlay closes, nothing
    written.
 
@@ -95,15 +96,18 @@ passes.
 
 ## 8. Stats and follow-ups
 
-1. With a few rows in the sheet, open the popup. Expect the four tiles (Applied,
+Works against the local log or a sheet — whichever is authoritative.
+
+1. With a few rows logged, open the popup. Expect the four tiles (Applied,
    This week, Interviews, Ghosted) and a line reading "N% heard back · N still
    open".
-2. Change a row's Status to "Rejected" in the sheet, reopen the popup. Expect
-   the response rate to move.
+2. Change a row's Status to "Rejected" (in the sheet if connected, otherwise via
+   Options → Your applications), reopen the popup. Expect the response rate to
+   move.
 3. Backdate a row's Date Applied by more than the ghost threshold, leaving
    Status at Applied. Expect the Ghosted tile to count it.
 4. Backdate a row's Follow-up On to yesterday. Expect the popup nudge, and
-   within a day the desktop notification. Clicking it should open your sheet.
+   within a day the desktop notification.
 5. Set that row's Status to Rejected. Expect it to drop out of the follow-up
    count — closed applications don't get chased.
 
@@ -119,14 +123,61 @@ passes.
 2. Check `chrome://extensions/shortcuts` if it doesn't fire — another extension
    may already own that combination.
 
-## 11. Schema migration
+## 11. Schema migration (needs a sheet)
 
 1. Make a tab with only the original 15 headers (A–O) and a data row.
 2. Point Options at it and hit Connect. Expect "added the new columns", headers
    P1:U1 filled in, and the existing data row untouched.
 3. Hit Connect again. Expect plain "headers verified" and no further writes.
 
-## 12. Offline queue
+## 12. Local mode, no Google account
+
+The default path, and the one most people will use. Do this with the sheet
+fields in Options left blank.
+
+1. Fresh install, no sheet configured. Log a job. Expect a plain "✓ Saved"
+   toast, no auth prompt, and no error.
+2. Options → **Your applications**. Expect the row listed with its date,
+   position, company and sponsorship verdict.
+3. Change its Status dropdown to "Rejected". Reopen the popup — expect the
+   response rate to reflect it.
+4. Delete a row with the ✕ button. Expect it gone from the list and from the
+   popup totals.
+5. Popup with no sheet configured: expect stats to still work, and "Open my
+   sheet or export" to land on the options page rather than erroring.
+
+## 13. Export
+
+1. **Download CSV** with a few rows logged. Expect a `ghosted-YYYY-MM-DD.csv`
+   file whose first line is the 21 column headers.
+2. Open it in Sheets or Excel. Expect columns to line up, a value containing a
+   comma (a "Seattle, WA" location) to stay in one cell, and a Notes value of
+   `=1+2` to display as text rather than computing to 3.
+3. **Copy for spreadsheet**, then paste into a blank Google Sheet. Expect it to
+   split across columns without an import dialog.
+4. Both buttons with nothing logged. Expect "Nothing to export yet", not an
+   empty file.
+5. Confirm no `id`, `savedAt` or `synced` column appears in either export.
+
+## 14. Nothing is lost when the sheet fails (needs a sheet)
+
+The point of saving locally first.
+
+1. Connect a sheet, then break it — change the tab name in Options to one that
+   doesn't exist.
+2. Log a job. Expect "✓ Saved — sheet sync will retry", the badge to appear, and
+   the row to be present in Options → Your applications.
+3. Fix the tab name, hit **Retry now**. Expect the row to reach the sheet and
+   the badge to clear, with no duplicate in the local log.
+
+## 15. Delete-all guard
+
+1. Click **Delete all local applications** once. Expect the button to change to
+   "Click again to permanently delete" and nothing to be deleted.
+2. Wait six seconds. Expect it to reset itself.
+3. Click twice in quick succession. Expect the log to be cleared.
+
+## 16. Offline queue
 
 1. Open the overlay, then go offline (DevTools → Network → Offline, or turn off
    Wi-Fi).
@@ -135,14 +186,14 @@ passes.
 3. Go back online. Within ~2 minutes, or immediately via popup → "Retry queued
    rows now", the row appears and the badge clears.
 
-## 13. Duplicates
+## 17. Duplicates
 
 1. Log a job, then trigger **Log this job** on the same job again.
 2. Expect the amber "You already logged this job on YYYY-MM-DD" banner, and the
    button now reads **Save anyway**.
 3. Esc → no row. Save anyway → duplicate row appended.
 
-## 14. Token expiry and re-auth
+## 18. Token expiry and re-auth (needs a sheet)
 
 1. Revoke access at <https://myaccount.google.com/permissions>, or just wait an
    hour for the access token to expire.
@@ -151,39 +202,39 @@ passes.
    consent window opens, and the row saves after you approve.
 3. Dismiss the consent window instead. Expect the row to be queued, not lost.
 
-## 15. Missing optional fields
+## 19. Missing optional fields
 
 1. Find a job with no salary and no industry listed.
 2. Trigger a log. Expect both blank (not guessed), highlighted amber with
    "couldn't auto-detect", and focus on the first missing field. Saving writes
    the blanks as-is.
 
-## 16. Sheet verification
+## 20. Sheet verification (needs a sheet)
 
 1. Point the options page at an **empty** tab → Connect. Expect "header row
    written" and A1:U1 filled in.
 2. Point at a tab with a **different** header → Connect. Expect the mismatch
    warning listing expected vs. found, and no change to the sheet.
 
-## 17. School subdomain
+## 21. School subdomain
 
 1. Use your school's subdomain (`myschool.joinhandshake.com`) rather than
    `app.joinhandshake.com`.
 2. Expect the floating button to appear and everything above to work.
 
-## 18. Formula injection
+## 22. Formula injection
 
 1. Log a job with Notes set to `=1+2`.
 2. Expect the cell to read `=1+2` as literal text (stored as `'=1+2`), not `3`.
 
-## 19. Posted-date sanity
+## 23. Posted-date sanity
 
 1. Find a job whose posted date shows as a bare month and day ("Jul 5") rather
    than a relative "3 days ago".
 2. Expect the current year, not 2001. This is the case `npm test` covers, worth
    one real-page confirmation.
 
-## 20. Quota and permission errors
+## 24. Quota and permission errors (needs a sheet)
 
 Hard to trigger for real. To simulate: point the options page at a sheet you
 can't edit, save a row, and expect it to queue with the badge showing and the

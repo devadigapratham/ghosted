@@ -702,3 +702,110 @@ test("DEFAULT_SETTINGS covers every new option the pages read", () => {
     assert.ok(key in U.DEFAULT_SETTINGS, `missing default: ${key}`);
   }
 });
+
+test.describe("toCSV / toTSV", () => {
+  const row = (over) => ({ Position: "SWE", Company: "Acme", ...over });
+
+  test("starts with the schema header", () => {
+    const lines = U.toCSV([]).split("\r\n");
+    assert.strictEqual(lines.length, 1);
+    assert.strictEqual(lines[0], U.COLUMNS.join(","));
+  });
+
+  test("writes one line per application", () => {
+    const lines = U.toCSV([row(), row(), row()]).split("\r\n");
+    assert.strictEqual(lines.length, 4); // header + 3
+  });
+
+  test("quotes a value containing a comma", () => {
+    const csv = U.toCSV([row({ Location: "Seattle, WA" })]);
+    assert.match(csv, /"Seattle, WA"/);
+  });
+
+  test("doubles embedded quotes", () => {
+    const csv = U.toCSV([row({ Notes: 'she said "hi"' })]);
+    assert.match(csv, /"she said ""hi"""/);
+  });
+
+  test("does not quote a plain value", () => {
+    const csv = U.toCSV([row({ Company: "Acme" })]);
+    assert.ok(!/"Acme"/.test(csv), "plain values should stay unquoted");
+  });
+
+  test("keeps the formula guard in the export", () => {
+    // A CSV opened in Excel evaluates formulas too, so the apostrophe matters
+    // just as much here as in Sheets.
+    const csv = U.toCSV([row({ Notes: "=1+2" })]);
+    assert.match(csv, /'=1\+2/);
+  });
+
+  test("TSV separates with tabs and quotes a value containing one", () => {
+    const tsv = U.toTSV([row({ Location: "Seattle, WA" })]);
+    assert.ok(tsv.includes("\t"), "expected tab separators");
+    // A comma needs no quoting in TSV.
+    assert.ok(!/"Seattle, WA"/.test(tsv), "commas should not be quoted in TSV");
+  });
+
+  test("column count per line matches the schema", () => {
+    const line = U.toCSV([row()]).split("\r\n")[1];
+    // No quoted commas in this row, so a naive split is a valid check.
+    assert.strictEqual(line.split(",").length, U.COLUMNS.length);
+  });
+
+  test("handles an empty or missing list", () => {
+    assert.strictEqual(U.toCSV([]), U.COLUMNS.join(","));
+    assert.strictEqual(U.toCSV(undefined), U.COLUMNS.join(","));
+  });
+
+  test("ignores the local-only bookkeeping keys", () => {
+    const csv = U.toCSV([row({ id: "uuid-here", savedAt: 123, synced: true })]);
+    assert.ok(!csv.includes("uuid-here"), "internal id should not be exported");
+    assert.ok(!csv.includes("123"), "savedAt should not be exported");
+  });
+});
+
+test.describe("sortApplications", () => {
+  test("puts the most recent application first", () => {
+    const sorted = U.sortApplications([
+      { Company: "old", "Date Applied": "2026-07-01" },
+      { Company: "new", "Date Applied": "2026-07-30" },
+      { Company: "mid", "Date Applied": "2026-07-15" },
+    ]);
+    assert.deepStrictEqual(sorted.map((a) => a.Company), ["new", "mid", "old"]);
+  });
+
+  test("breaks ties on save time, newest first", () => {
+    const sorted = U.sortApplications([
+      { Company: "first", "Date Applied": "2026-07-30", savedAt: 100 },
+      { Company: "second", "Date Applied": "2026-07-30", savedAt: 200 },
+    ]);
+    assert.deepStrictEqual(sorted.map((a) => a.Company), ["second", "first"]);
+  });
+
+  test("does not mutate the input", () => {
+    const apps = [
+      { Company: "a", "Date Applied": "2026-07-01" },
+      { Company: "b", "Date Applied": "2026-07-30" },
+    ];
+    U.sortApplications(apps);
+    assert.strictEqual(apps[0].Company, "a");
+  });
+
+  test("survives missing dates and an empty list", () => {
+    assert.strictEqual(U.sortApplications([]).length, 0);
+    assert.strictEqual(U.sortApplications(undefined).length, 0);
+    assert.strictEqual(U.sortApplications([{ Company: "x" }]).length, 1);
+  });
+});
+
+test("summarize works on the local log shape, extra keys and all", () => {
+  // What storage.local actually holds: schema fields plus id/savedAt/synced.
+  const apps = [
+    { Company: "Acme", Position: "SWE", Status: "Applied", "Date Applied": "2026-07-29", id: "a", savedAt: 1, synced: false },
+    { Company: "Beta", Position: "SWE", Status: "Offer", "Date Applied": "2026-07-28", id: "b", savedAt: 2, synced: true },
+  ];
+  const stats = U.summarize(apps, U.DEFAULT_SETTINGS, "2026-07-30");
+  assert.strictEqual(stats.total, 2);
+  assert.strictEqual(stats.offers, 1);
+  assert.strictEqual(stats.thisWeek, 2);
+});

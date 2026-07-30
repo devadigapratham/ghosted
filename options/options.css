@@ -53,6 +53,31 @@ input.narrow { width: 90px; }
 .note { font-size: 12px; color: var(--muted); margin: 0 0 10px; }
 .note.subtle { margin-top: 10px; font-size: 11px; }
 label.check { margin-bottom: 8px; }
+
+.badge {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 6px; border-radius: 4px; vertical-align: middle;
+  background: var(--border); color: var(--muted);
+}
+.count { font-size: 12px; font-weight: 400; color: var(--muted); }
+button.danger { border-color: #d9534f55; color: #d9534f; }
+
+.tablewrap { max-height: 340px; overflow: auto; margin: 10px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); }
+th {
+  position: sticky; top: 0; background: var(--bg);
+  font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+}
+td.good { color: var(--accent); }
+td.bad { color: #d9534f; }
+td select { font-size: 11px; padding: 2px 4px; background: transparent; color: inherit;
+  border: 1px solid var(--border); border-radius: 4px; }
+button.linkish {
+  padding: 2px 6px; border: none; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 12px;
+}
+button.linkish:hover { color: #d9534f; }
 button {
   padding: 8px 16px;
   border-radius: 6px;

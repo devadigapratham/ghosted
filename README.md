@@ -1,12 +1,32 @@
 # Ghosted 👻
 
-Logs every job you apply to on Handshake into a Google Sheet, so you know
-exactly who ghosted you.
+Logs every job you apply to on Handshake, so you know exactly who ghosted you.
 
 Apply to something on [Handshake](https://joinhandshake.com) and a small
 confirmation box pops up with the job details already filled in. Add the two or
 three things it can't know (which role bucket, whether you had a connection
-there), hit Enter, and it appends a row to your sheet.
+there), hit Enter, and it's logged.
+
+Free, no account, no sign-up, nothing to pay for. Google Sheets sync is
+available if you want it, and optional.
+
+## Quick start
+
+1. `chrome://extensions` → turn on **Developer mode** (top right) → **Load
+   unpacked** → pick this folder.
+2. Go apply to a job.
+
+That's it. Applications are saved on your own machine, and you can export them
+to CSV or paste them straight into any spreadsheet from the options page. No
+Google account, no API keys, nothing to configure.
+
+Connect a Google Sheet later if you want your applications mirrored somewhere
+you can share and chart them — see [below](#optional-google-sheets-sync). Also
+free.
+
+Worth thirty seconds in **⚙ Options** either way: if you need visa sponsorship
+leave that toggle on (it drives the pre-apply warnings), set your Role
+dropdown options, and pick how many days of silence counts as ghosted.
 
 ## What it does beyond logging
 
@@ -38,33 +58,49 @@ than that.
 **Catches the deadline.** "Apply by" dates get scraped and stored, so a rolling
 list of postings has actual dates on it.
 
-## The sheet
+## The columns
 
-One row per application, columns A–U:
+One row per application, 21 fields:
 
 `Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word | Job Type | Sponsorship | Deadline | Follow-up On | Job URL | Job ID`
 
-The first time you connect, it reads row 1 of your tab. Empty tab, and it writes
-the header for you. Existing headers that don't match, and it tells you what's
-different and refuses to touch anything.
+These are the CSV/TSV export headers, and the sheet header row if you connect
+one.
 
-If you have a sheet from an earlier version with just the original 15 columns,
-hit **Connect Google & verify sheet** once. It appends the six new headers and
-leaves every existing row alone. New columns are only ever added at the end, so
-old rows stay lined up.
+## Where your applications live
 
-## Setup
+Every application is written to the extension's own storage first, always. That
+copy is the source of truth: it needs no account, works offline, and means a
+failed sheet sync can never lose a row you already filled in.
 
-You need a Google Cloud OAuth client to talk to the Sheets API. It's free and
-takes about five minutes, but there's no way around it — Google won't hand out
-sheet access without one.
+The options page has the full list, with an editable Status dropdown, a delete
+button per row, **Download CSV**, and **Copy for spreadsheet** (tab-separated,
+so it pastes cleanly into Sheets, Excel or Numbers). The local log holds the
+2000 most recent applications.
 
-### 1. Load the extension
+## Optional: Google Sheets sync
 
-`chrome://extensions` → turn on **Developer mode** (top right) → **Load
-unpacked** → pick this folder.
+Skip this entirely if you don't want it. Nothing above depends on it.
 
-The extension ID is pinned in `manifest.json`, so it's always:
+Connecting a sheet mirrors every application into a spreadsheet you can share,
+chart, filter, or edit from your phone. Once connected, the sheet becomes the
+copy the stats read from, since that's where you'll be updating Status.
+
+**It costs nothing.** The Google Sheets API is not a metered service — there's
+no per-request charge and no billing account required, so there's nothing to
+autopay and no card to put on file. You get rate limits (300 requests/minute)
+instead of a bill, and this extension uses roughly one write per application.
+The Cloud Console will show "activate your full account" banners; ignore them.
+The only thing Google charges for anywhere near this is the $5 one-time fee to
+*publish* an extension to the Web Store, which you're not doing.
+
+What the setup buys you is an OAuth client, which is the only way Google will
+hand out access to your own spreadsheet.
+
+### 1. Get the extension ID
+
+Already done if you loaded it above. The ID is pinned in `manifest.json`, so
+it's always:
 
 ```
 lkfokghblcgjphlkjlfpfgcdhpbfdldp
@@ -75,7 +111,7 @@ can move this folder, reinstall, or clone it on another machine without redoing
 step 2. If you loaded the extension before this ID was pinned, hit the reload
 (↻) icon on the card and check that the ID now matches the string above.
 
-### 2. Make the Google Cloud project
+### 2. Make a Google Cloud project
 
 1. Go to <https://console.cloud.google.com/> and sign in with the account that
    owns the spreadsheet.
@@ -111,19 +147,19 @@ placeholder is still live.
 
 ### 4. Point it at your sheet
 
-Click the ghost in the toolbar → **⚙ Options**.
+Click the ghost in the toolbar → **⚙ Options** → the **Google Sheets sync**
+section at the bottom.
 
 1. Paste your spreadsheet URL (the ID gets parsed out of it) and the tab name,
    e.g. `Sheet1` or `Applications`.
-2. Edit the **Role dropdown options** to whatever buckets you actually use.
-3. Under **Work authorization**, leave "I need visa sponsorship" on if you do.
-   That's what turns on the badge and the pre-apply warnings. Turn it off if
-   you don't need sponsorship and you'd rather not see them.
-4. Under **Follow-ups**, set how many days of silence before it nudges you
-   (default 14) and how many before it calls an application ghosted (default 21).
-5. Click **Connect Google & verify sheet**. A Google window opens — approve the
+2. Click **Connect Google & verify sheet**. A Google window opens — approve the
    Sheets permission. You'll see an "unverified app" warning, which is expected
    for a personal OAuth client; continue past it.
+
+It reads row 1 of your tab. An empty tab gets the header written for you. A tab
+whose headers don't match is left completely alone. A sheet from an earlier
+version with only the original 15 columns gets the six newer headers appended,
+with existing rows untouched — new columns are only ever added at the end.
 
 The status line then says one of:
 
@@ -134,7 +170,7 @@ The status line then says one of:
 - **headers don't match** — it lists expected vs. found. Fix the sheet by hand;
   nothing was overwritten.
 
-### 5. Check the scraping before you trust it
+## Check the scraping before you trust it
 
 Worth doing once, and it costs nothing. Open any Handshake job page and click
 the floating **＋ Log this job** button. The overlay opens with everything it
@@ -215,9 +251,10 @@ test/utils.test.js     unit tests (npm test)
 npm test
 ```
 
-158 tests over the pure logic in `shared/utils.js`: date normalization,
+173 tests over the pure logic in `shared/utils.js`: date normalization,
 sponsorship classification, formula escaping, spreadsheet ID parsing, column
-ordering, dedupe pruning, stats. No dependencies, no network, no browser.
+ordering, dedupe pruning, stats, CSV/TSV export. No dependencies, no network,
+no browser.
 
 Everything that needs a real browser — scraping, submission detection, OAuth,
 the retry queue — is in [TESTPLAN.md](TESTPLAN.md) as a manual checklist.
@@ -230,6 +267,8 @@ supersampled buffer and writes PNGs using only `node:zlib`.
 
 ## Privacy
 
+- Applications are stored locally in the extension, and go nowhere else unless
+  you connect a sheet. There is no server, no analytics, and no account.
 - OAuth tokens live in the service worker. Content scripts never see one.
 - The only scope requested is `spreadsheets`. No Drive access, so it can't see
   any of your other files.

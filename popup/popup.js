@@ -7,7 +7,12 @@ async function refreshQueue() {
   const resp = await ask({ type: "getQueue" });
   const count = resp?.count ?? 0;
   const info = $("queueInfo");
-  info.textContent = count === 1 ? "1 row waiting to save" : `${count} rows waiting to save`;
+  // Rows are already saved locally; the queue is only the sheet mirror.
+  info.textContent = count === 0
+    ? "All rows saved"
+    : count === 1
+      ? "1 row waiting to sync to your sheet"
+      : `${count} rows waiting to sync to your sheet`;
   info.classList.toggle("has", count > 0);
   $("retryBtn").hidden = count === 0;
 }
@@ -16,11 +21,8 @@ async function refreshStats() {
   const resp = await ask({ type: "getStats" });
 
   if (!resp?.ok) {
-    // Not configured yet, or offline. Don't shout about it in a popup.
     $("statsNote").hidden = false;
-    $("statsNote").textContent = resp?.error
-      ? "Stats unavailable — check Options."
-      : "Connect a sheet in Options to see stats.";
+    $("statsNote").textContent = "Stats unavailable — check Options.";
     return;
   }
 
@@ -32,9 +34,12 @@ async function refreshStats() {
   $("stats").hidden = false;
 
   $("statsNote").hidden = false;
-  $("statsNote").textContent = s.total
-    ? `${s.responseRate}% heard back · ${s.open} still open`
-    : "No applications logged yet.";
+  if (!s.total) {
+    $("statsNote").textContent = "No applications logged yet.";
+  } else {
+    const where = resp.stale ? " · sheet unreachable, showing local" : "";
+    $("statsNote").textContent = `${s.responseRate}% heard back · ${s.open} still open${where}`;
+  }
 
   if (s.needsFollowUp > 0) {
     $("nudge").hidden = false;
@@ -72,7 +77,9 @@ $("retryBtn").addEventListener("click", async () => {
 $("sheetBtn").addEventListener("click", async () => {
   const resp = await ask({ type: "openSheet" });
   if (resp?.ok) window.close();
-  else $("sheetBtn").textContent = "No sheet configured yet";
+  // No sheet connected is the default state, not an error — send them to the
+  // place where the local log and the export buttons live.
+  else chrome.runtime.openOptionsPage();
 });
 
 $("optionsBtn").addEventListener("click", () => chrome.runtime.openOptionsPage());

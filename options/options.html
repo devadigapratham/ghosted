@@ -8,20 +8,7 @@
 <body>
   <main>
     <h1>Ghosted</h1>
-    <p class="tagline">Every job you apply to on Handshake, logged to a Google Sheet.</p>
-
-    <section>
-      <h2>Google Sheet</h2>
-      <label for="sheetUrl">Spreadsheet URL or ID</label>
-      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/…  (or the bare ID)">
-      <label for="sheetName">Tab (sheet) name</label>
-      <input id="sheetName" type="text" placeholder="Sheet1">
-      <div class="row">
-        <button id="connectBtn" class="primary">Connect Google &amp; verify sheet</button>
-        <span id="connectStatus" class="status"></span>
-      </div>
-      <p id="headerWarning" class="warning" hidden></p>
-    </section>
+    <p class="tagline">Every job you apply to on Handshake, logged — so you know exactly who ghosted you.</p>
 
     <section>
       <h2>Work authorization</h2>
@@ -67,18 +54,70 @@
       <input id="ghostAfterDays" type="number" min="1" max="365" class="narrow">
     </section>
 
-    <section>
-      <h2>Retry queue</h2>
-      <p><span id="queueCount">0</span> row(s) waiting to be saved.
-        <button id="retryBtn">Retry now</button>
-      </p>
-      <p id="queueError" class="warning" hidden></p>
-    </section>
-
     <div class="row">
       <button id="saveBtn" class="primary">Save settings</button>
       <span id="saveStatus" class="status"></span>
     </div>
+
+    <section>
+      <h2>Your applications <span id="appCount" class="count"></span></h2>
+      <p class="note">
+        Every application is saved here on your own machine, no account needed.
+        Export any time, or connect a Google Sheet below to mirror them
+        automatically.
+      </p>
+      <div class="row">
+        <button id="csvBtn">↓ Download CSV</button>
+        <button id="tsvBtn">⧉ Copy for spreadsheet</button>
+        <span id="exportStatus" class="status"></span>
+      </div>
+      <p id="sheetAuthority" class="note subtle" hidden></p>
+      <div id="appTableWrap" class="tablewrap">
+        <table id="appTable">
+          <thead>
+            <tr>
+              <th>Applied</th><th>Position</th><th>Company</th>
+              <th>Sponsorship</th><th>Status</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="appRows"></tbody>
+        </table>
+      </div>
+      <p id="appEmpty" class="note" hidden>Nothing logged yet. Apply to something, or hit “＋ Log this job” on a job page.</p>
+      <p id="appTruncated" class="note subtle" hidden></p>
+      <div class="row">
+        <button id="clearBtn" class="danger">Delete all local applications</button>
+        <span id="clearStatus" class="status"></span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Google Sheets sync <span class="badge">optional</span></h2>
+      <p class="note">
+        Not required — everything above works without it. Connecting a sheet
+        mirrors each application into a spreadsheet you can share, chart, or
+        edit from your phone. It's free: the Sheets API has no per-use charge and
+        needs no billing account. See the README for the one-time setup.
+      </p>
+      <label for="sheetUrl">Spreadsheet URL or ID</label>
+      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/…  (or leave blank to stay local)">
+      <label for="sheetName">Tab (sheet) name</label>
+      <input id="sheetName" type="text" placeholder="Sheet1">
+      <div class="row">
+        <button id="connectBtn" class="primary">Connect Google &amp; verify sheet</button>
+        <span id="connectStatus" class="status"></span>
+      </div>
+      <p id="headerWarning" class="warning" hidden></p>
+    </section>
+
+    <section>
+      <h2>Sync queue</h2>
+      <p><span id="queueCount">0</span> row(s) waiting to reach the sheet.
+        <button id="retryBtn">Retry now</button>
+      </p>
+      <p class="note subtle">Only affects the Google Sheets mirror — these rows are already saved locally.</p>
+      <p id="queueError" class="warning" hidden></p>
+    </section>
   </main>
   <script src="../shared/utils.js"></script>
   <script src="options.js"></script>

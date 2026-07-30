@@ -3,6 +3,11 @@ const $ = (id) => document.getElementById(id);
 
 const CHECKBOXES = ["autoCapture", "remindersEnabled", "needsSponsorship", "showSponsorshipChip"];
 const NUMBERS = ["followUpDays", "ghostAfterDays"];
+const TABLE_LIMIT = 200;
+
+const ask = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
+
+let applications = [];
 
 async function loadSettings() {
   const s = await chrome.storage.sync.get(U.DEFAULT_SETTINGS);
@@ -85,7 +90,7 @@ function showHeaderResult(resp) {
 }
 
 async function refreshQueue() {
-  const resp = await chrome.runtime.sendMessage({ type: "getQueue" }).catch(() => null);
+  const resp = await ask({ type: "getQueue" });
   $("queueCount").textContent = resp?.count ?? "?";
 
   const err = $("queueError");
@@ -97,21 +102,161 @@ async function refreshQueue() {
   }
 }
 
+function statusSelect(app) {
+  const sel = document.createElement("select");
+  for (const opt of U.STATUS_OPTIONS) {
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    sel.appendChild(o);
+  }
+  sel.value = U.STATUS_OPTIONS.includes(app.Status) ? app.Status : "Applied";
+  sel.addEventListener("change", async () => {
+    await ask({ type: "updateApplication", id: app.id, changes: { Status: sel.value } });
+    app.Status = sel.value;
+  });
+  return sel;
+}
+
+function renderApplications() {
+  const tbody = $("appRows");
+  tbody.textContent = "";
+
+  $("appCount").textContent = applications.length ? `(${applications.length})` : "";
+  $("appEmpty").hidden = applications.length > 0;
+  $("appTableWrap").hidden = applications.length === 0;
+
+  const shown = applications.slice(0, TABLE_LIMIT);
+  $("appTruncated").hidden = applications.length <= TABLE_LIMIT;
+  $("appTruncated").textContent =
+    `Showing the ${TABLE_LIMIT} most recent of ${applications.length}. Export to see everything.`;
+
+  for (const app of shown) {
+    const tr = document.createElement("tr");
+
+    const cell = (text) => {
+      const td = document.createElement("td");
+      td.textContent = text || "—";
+      return td;
+    };
+
+    tr.append(cell(app["Date Applied"]), cell(app.Position), cell(app.Company));
+
+    const sponsor = cell(app.Sponsorship);
+    if (U.isSponsorshipBlocker(app.Sponsorship)) sponsor.className = "bad";
+    else if (app.Sponsorship === "Sponsors") sponsor.className = "good";
+    tr.appendChild(sponsor);
+
+    const statusTd = document.createElement("td");
+    statusTd.appendChild(statusSelect(app));
+    tr.appendChild(statusTd);
+
+    const delTd = document.createElement("td");
+    const del = document.createElement("button");
+    del.className = "linkish";
+    del.textContent = "✕";
+    del.title = "Delete this row from the local log";
+    del.addEventListener("click", async () => {
+      await ask({ type: "deleteApplication", id: app.id });
+      applications = applications.filter((a) => a.id !== app.id);
+      renderApplications();
+    });
+    delTd.appendChild(del);
+    tr.appendChild(delTd);
+
+    tbody.appendChild(tr);
+  }
+}
+
+async function refreshApplications() {
+  const resp = await ask({ type: "getApplications" });
+  applications = resp?.applications || [];
+  renderApplications();
+
+  const note = $("sheetAuthority");
+  note.hidden = !resp?.sheetConnected;
+  note.textContent =
+    "A sheet is connected, so the popup's stats come from it. Status changes made " +
+    "here only affect this local log — edit the sheet to change what the stats say.";
+}
+
+function download(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  // Revoking immediately can cancel the download in some builds.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+$("csvBtn").addEventListener("click", () => {
+  if (!applications.length) {
+    setStatus("exportStatus", "Nothing to export yet", "err");
+    return;
+  }
+  download(`ghosted-${U.todayISO()}.csv`, U.toCSV(applications), "text/csv;charset=utf-8");
+  setStatus("exportStatus", `Exported ${applications.length} row(s) ✓`, "ok");
+});
+
+$("tsvBtn").addEventListener("click", async () => {
+  if (!applications.length) {
+    setStatus("exportStatus", "Nothing to export yet", "err");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(U.toTSV(applications));
+    setStatus("exportStatus", "Copied — paste into any spreadsheet ✓", "ok");
+  } catch {
+    setStatus("exportStatus", "Clipboard blocked — use Download CSV instead", "err");
+  }
+});
+
+$("clearBtn").addEventListener("click", async () => {
+  // No confirm() here: it blocks the extension page and there's no undo prompt
+  // worth trusting, so require a second deliberate click instead.
+  const btn = $("clearBtn");
+  if (btn.dataset.armed !== "1") {
+    btn.dataset.armed = "1";
+    btn.textContent = "Click again to permanently delete";
+    setStatus("clearStatus", `${applications.length} row(s) will be deleted`, "err");
+    setTimeout(() => {
+      btn.dataset.armed = "";
+      btn.textContent = "Delete all local applications";
+      setStatus("clearStatus", "");
+    }, 5000);
+    return;
+  }
+
+  await ask({ type: "clearApplications" });
+  btn.dataset.armed = "";
+  btn.textContent = "Delete all local applications";
+  setStatus("clearStatus", "Local log cleared", "ok");
+  refreshApplications();
+});
+
 $("saveBtn").addEventListener("click", saveSettings);
 
 $("connectBtn").addEventListener("click", async () => {
   if (!(await saveSettings())) return;
+  if (!$("sheetUrl").value.trim()) {
+    setStatus("connectStatus", "Add a spreadsheet URL first", "err");
+    return;
+  }
   setStatus("connectStatus", "Connecting…");
   const resp = await chrome.runtime
     .sendMessage({ type: "connectGoogle" })
     .catch((e) => ({ ok: false, error: e.message }));
   showHeaderResult(resp);
+  refreshApplications();
 });
 
 $("retryBtn").addEventListener("click", async () => {
-  await chrome.runtime.sendMessage({ type: "retryQueue" }).catch(() => null);
+  await ask({ type: "retryQueue" });
   refreshQueue();
 });
 
 loadSettings();
 refreshQueue();
+refreshApplications();

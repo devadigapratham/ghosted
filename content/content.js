@@ -779,8 +779,9 @@
           force: true, // the overlay already showed the dupe warning
         });
         close();
-        if (resp?.ok) toast("✓ Saved to Google Sheet");
-        else if (resp?.queued) toast("Saved offline — will retry automatically", "warn", 6000);
+        if (resp?.synced) toast("✓ Saved to Google Sheet");
+        else if (resp?.queued) toast("✓ Saved — sheet sync will retry", "warn", 6000);
+        else if (resp?.ok) toast("✓ Saved");
         else toast(`Failed to save: ${resp?.error || "unknown error"}`, "error", 8000);
       } catch (e) {
         close();

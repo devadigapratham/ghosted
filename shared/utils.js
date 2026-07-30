@@ -74,6 +74,10 @@
   const DEDUPE_MAX_AGE_DAYS = 365;
   const DEDUPE_MAX_ENTRIES = 750;
 
+  // Local log cap. A row is well under 1KB, so this stays far inside the
+  // storage.local quota while being more applications than anyone sends.
+  const APPLICATIONS_MAX = 2000;
+
   const pad2 = (n) => String(n).padStart(2, "0");
 
   // Local time, not UTC — toISOString() would shift the date either side of
@@ -344,6 +348,37 @@
     return spreadsheetId ? `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit` : "";
   }
 
+  // ── Export ──
+  // Cells are already sanitized on the way in, so the leading-apostrophe
+  // formula guard is preserved here rather than reapplied.
+  function escapeDelimited(value, delimiter) {
+    const s = String(value ?? "");
+    if (s.includes('"') || s.includes(delimiter) || /[\r\n]/.test(s)) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  }
+
+  function toDelimited(rows, delimiter) {
+    const lines = [COLUMNS.map((c) => escapeDelimited(c, delimiter)).join(delimiter)];
+    for (const row of rows || []) {
+      lines.push(rowToValues(row).map((v) => escapeDelimited(v, delimiter)).join(delimiter));
+    }
+    return lines.join("\r\n");
+  }
+
+  // CSV for downloading, TSV for pasting straight into a spreadsheet.
+  const toCSV = (rows) => toDelimited(rows, ",");
+  const toTSV = (rows) => toDelimited(rows, "\t");
+
+  // Newest first, which is the order anyone wants to look at these in.
+  function sortApplications(apps) {
+    return [...(apps || [])].sort((a, b) => {
+      const d = String(b["Date Applied"] || "").localeCompare(String(a["Date Applied"] || ""));
+      return d !== 0 ? d : (b.savedAt || 0) - (a.savedAt || 0);
+    });
+  }
+
   // Drops entries past DEDUPE_MAX_AGE_DAYS, then trims oldest-first if still
   // over the cap. Returns a new object.
   function pruneLoggedJobs(logged, today = todayISO()) {
@@ -418,7 +453,11 @@
     DEFAULT_SETTINGS,
     DEDUPE_MAX_AGE_DAYS,
     DEDUPE_MAX_ENTRIES,
+    APPLICATIONS_MAX,
     WORK_AUTH_RULES,
+    toCSV,
+    toTSV,
+    sortApplications,
     columnLetter,
     toISODate,
     todayISO,
