@@ -1,0 +1,54 @@
+{
+  "manifest_version": 3,
+  "name": "Handshake → Sheets Job Tracker",
+  "version": "1.0.0",
+  "description": "Logs every job you apply to on Handshake into a Google Sheet, with a quick confirmation popup for manual fields.",
+  "minimum_chrome_version": "111",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": ["storage", "identity", "contextMenus", "alarms", "activeTab"],
+  "host_permissions": ["https://sheets.googleapis.com/"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.joinhandshake.com/*",
+        "https://*.joinhandshake.co.uk/*",
+        "https://*.joinhandshake.de/*"
+      ],
+      "js": ["content/urlwatch.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://*.joinhandshake.com/*",
+        "https://*.joinhandshake.co.uk/*",
+        "https://*.joinhandshake.de/*"
+      ],
+      "js": ["shared/utils.js", "content/selectors.js", "content/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Handshake → Sheets Job Tracker",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options/options.html",
+  "oauth2": {
+    "client_id": "PASTE_YOUR_CLIENT_ID_HERE.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+  }
+}

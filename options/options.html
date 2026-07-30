@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Handshake → Sheets Tracker — Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>Handshake → Sheets Job Tracker</h1>
+
+    <section>
+      <h2>Google Sheet</h2>
+      <label for="sheetUrl">Spreadsheet URL or ID</label>
+      <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/…  (or the bare ID)">
+      <label for="sheetName">Tab (sheet) name</label>
+      <input id="sheetName" type="text" placeholder="Sheet1">
+      <div class="row">
+        <button id="connectBtn" class="primary">Connect Google &amp; verify sheet</button>
+        <span id="connectStatus" class="status"></span>
+      </div>
+      <p id="headerWarning" class="warning" hidden></p>
+    </section>
+
+    <section>
+      <h2>Capture behavior</h2>
+      <label class="check">
+        <input id="autoCapture" type="checkbox" checked>
+        Auto-detect application submissions (uncheck to only log via the “Log this job” button)
+      </label>
+      <label for="roleOptions">Role dropdown options (comma-separated)</label>
+      <input id="roleOptions" type="text" placeholder="SWE, Data, PM, Research, Other">
+    </section>
+
+    <section>
+      <h2>Retry queue</h2>
+      <p><span id="queueCount">0</span> row(s) waiting to be saved.
+        <button id="retryBtn">Retry now</button>
+      </p>
+      <p id="queueError" class="warning" hidden></p>
+    </section>
+
+    <div class="row">
+      <button id="saveBtn" class="primary">Save settings</button>
+      <span id="saveStatus" class="status"></span>
+    </div>
+  </main>
+  <script src="../shared/utils.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

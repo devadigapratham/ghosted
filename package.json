@@ -1,0 +1,11 @@
+{
+  "name": "handshake-sheets-job-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chrome extension that logs Handshake job applications to a Google Sheet",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\"",
+    "icons": "node tools/make-icons.js"
+  }
+}

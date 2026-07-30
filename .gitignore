@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Node (no runtime deps — this is only for the test/icon tooling)
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Local Claude Code permissions, not shared
+.claude/settings.local.json
+
+# Packaged extension builds
+*.zip
+*.crx
+*.pem
