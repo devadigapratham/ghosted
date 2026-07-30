@@ -622,6 +622,21 @@
     });
   }
 
+  // Does this path identify one specific posting, rather than a list of them?
+  // Without this the floating button appears on search results, and logging
+  // there saves a row whose id is "/jobs/search/" and whose fields are whatever
+  // the first heading happened to say.
+  const LIST_PATH = /\/(jobs?|careers?|openings?|positions?|vacancies|search|results|browse)\/?$/i;
+  const SEARCH_SEGMENT = /\/(search|results|browse|explore)(\/|$)/i;
+  const POSTING_PATH = /\/(jobs?|careers?|opening|posting|position|apply|vacanc)[^/]*\/[^/]+/i;
+
+  function looksLikeJobPath(pathname) {
+    const path = String(pathname || "");
+    if (LIST_PATH.test(path)) return false;
+    if (SEARCH_SEGMENT.test(path)) return false;
+    return POSTING_PATH.test(path);
+  }
+
   // A board-independent key for the same opening. Applying through LinkedIn's
   // "apply on company website" lands you on Greenhouse or Workday, where the
   // job id is different, so the job id alone would log the application twice.
@@ -742,6 +757,7 @@
     sheetUrl,
     pruneLoggedJobs,
     roleKey,
+    looksLikeJobPath,
     summarize,
   };
 })();

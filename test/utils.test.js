@@ -1329,3 +1329,49 @@ test.describe("Source column", () => {
     assert.strictEqual(rows[0].Source, "LinkedIn");
   });
 });
+
+test.describe("looksLikeJobPath", () => {
+  test.describe("accepts a specific posting", () => {
+    const paths = [
+      "/jobs/8271934",
+      "/stu/postings/551",
+      "/acme/jobs/4099887",
+      "/jobs/view/3912345678",
+      "/en/job/12345/software-engineer-intern",
+      "/careers/swe-intern",
+      "/job/R-12345",
+      "/apply/senior-engineer",
+    ];
+    for (const p of paths) {
+      test(p, () => assert.strictEqual(U.looksLikeJobPath(p), true));
+    }
+  });
+
+  test.describe("rejects a list or search page", () => {
+    // These are why the guard exists: the button used to appear here, and
+    // logging saved a row whose id was the search path.
+    const paths = [
+      "/jobs",
+      "/jobs/",
+      "/jobs/search/",
+      "/jobs/search",
+      "/careers",
+      "/careers/",
+      "/positions/",
+      "/jobs/browse/engineering",
+      "/search/jobs",
+      "/feed/",
+      "/",
+      "/messaging/thread/123",
+    ];
+    for (const p of paths) {
+      test(p, () => assert.strictEqual(U.looksLikeJobPath(p), false));
+    }
+  });
+
+  test("handles nullish input", () => {
+    assert.strictEqual(U.looksLikeJobPath(undefined), false);
+    assert.strictEqual(U.looksLikeJobPath(null), false);
+    assert.strictEqual(U.looksLikeJobPath(""), false);
+  });
+});

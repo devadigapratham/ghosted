@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-359%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-380%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to, so you know exactly who ghosted you.
@@ -489,7 +489,7 @@ npm test
 ```
 
 ```sh
-npm test           # 309 unit tests, no dependencies, no browser
+npm test           # 330 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
@@ -590,9 +590,16 @@ will show a "disable developer mode extensions" prompt now and then; dismissing
 it is fine.
 
 **Does it update automatically?**
-No, an unpacked extension doesn't. `git pull`, then hit reload (↻) on the card
-at `chrome://extensions`. Your data isn't in the folder, so updating never
-touches it.
+No. An extension loaded from a folder is a copy of the files on your disk, with
+no link back to this repo, so pushing code changes nothing on anyone else's
+machine. To update: `git pull` (or re-download the ZIP and replace the folder),
+then hit reload (↻) on the card at `chrome://extensions`. Your data isn't in the
+folder, so updating never touches it.
+
+Publishing to the Chrome Web Store is the only way to get real auto-updates: from
+then on Chrome pushes new versions to every install within a few hours. It costs
+$5 once. Note that the hosted dashboard, if you deploy it, *does* update the
+moment you push.
 
 **Can I use it on two computers?**
 Yes, two ways. Export a CSV and import it on the other machine, or connect the

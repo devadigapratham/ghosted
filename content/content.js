@@ -63,10 +63,10 @@
     }
   }
 
-  // Structured job data, or a URL that says "job", is enough to offer logging.
+  // Structured job data, or a path that names one specific posting.
   function looksLikeJobPage() {
     if (jsonLdJobPosting()) return true;
-    return /\/(jobs?|careers?|opening|posting|apply|vacanc)/i.test(location.pathname);
+    return U.looksLikeJobPath(location.pathname);
   }
 
   function jobUrl() {
@@ -281,6 +281,33 @@
 
   const scheduleChipUpdate = debounce(updateChip, 700);
 
+  // A mention of "cover letter" is not a cover letter. Mirrors the résumé
+  // check: look for something actually written or attached.
+  function detectCoverLetter(dialog) {
+    if (!S.coverLetter.test(dialog.textContent || "")) return "";
+
+    for (const field of dialog.querySelectorAll("textarea, input[type='file']")) {
+      const labelled = `${field.getAttribute("name") || ""} ${field.getAttribute("id") || ""} ` +
+        `${field.getAttribute("aria-label") || ""} ${field.getAttribute("placeholder") || ""}`;
+      const aboutCover = S.coverLetter.test(labelled);
+      if (field.tagName === "TEXTAREA" && field.value.trim().length > 40 && (aboutCover || dialog.querySelectorAll("textarea").length === 1)) {
+        return "Yes";
+      }
+      if (field.type === "file" && field.files?.length && aboutCover) return "Yes";
+    }
+
+    // A rendered filename next to cover-letter wording also counts.
+    for (const el of dialog.querySelectorAll("label, li, p, span, div")) {
+      if (el.childElementCount > 0) continue;
+      const t = clean(el.textContent);
+      if (!t || t.length > 120) continue;
+      if (S.coverLetter.test(t) && S.resumeUpload.filenamePattern.test(t)) return "Yes";
+    }
+
+    // The step exists but nothing was written, which is worth recording as No.
+    return "No";
+  }
+
   function detectResumeUpload(dialog) {
     for (const sel of S.resumeUpload.controls) {
       let inputs;
@@ -328,7 +355,8 @@
   // rescan on every mutation rather than once on open.
   function scanApplyModal(dialog) {
     if (!pendingApp) return;
-    if (S.coverLetter.test(dialog.textContent || "")) pendingApp.coverLetter = "Yes";
+    const cover = detectCoverLetter(dialog);
+    if (cover === "Yes" || !pendingApp.coverLetter) pendingApp.coverLetter = cover;
 
     const upload = detectResumeUpload(dialog);
     // Never downgrade a "Yes": a later step may re-render without the filename.
