@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-173%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-276%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to on Handshake, so you know exactly who ghosted you.
@@ -55,9 +55,12 @@ authoritative — the sheet if you've connected one, otherwise the local log.
   ![The All jobs table](docs/all-jobs-light.jpg)
 
 - **Deadlines** — what's closing, overdue first.
-- **Settings** — capture, follow-ups, sponsorship, and the optional sheet.
+- **Needs attention** — one list of closing deadlines, overdue follow-ups and
+  applications that have gone quiet, most urgent first.
+- **Settings** — capture, follow-ups, sponsorship, weekly goal, optional sheet.
 
-Light and dark themes, and a toggle if you want to override your OS setting.
+Light and dark themes with a toggle. Press <kbd>?</kbd> for keyboard shortcuts
+(<kbd>/</kbd> to search, <kbd>g</kbd> then a letter to jump between views).
 
 ## What it does beyond logging
 
@@ -95,6 +98,18 @@ One row per application, 21 fields:
 These are the CSV/TSV export headers, and the sheet header row if you connect
 one.
 
+## Import and export
+
+The sidebar has **Import CSV / JSON**, **Export CSV** and **Copy for sheet**.
+
+Import accepts what the export writes, a Google Sheets or Excel export, or a JSON
+backup. Header order and casing don't have to match and unknown columns are
+skipped, so a spreadsheet you'd already been keeping by hand will load. Rows are
+matched on Handshake job id when there is one and on company + position + date
+otherwise; anything already present is skipped rather than duplicated, and an
+existing row is never overwritten — so re-importing can't clobber a status you
+set yourself.
+
 ## Where your applications live
 
 Every application is written to the extension's own storage first, always. That
@@ -105,6 +120,31 @@ The dashboard reads and edits that copy directly, and the sidebar has
 **Export CSV** and **Copy for sheet** (tab-separated, so it pastes cleanly into
 Sheets, Excel or Numbers). The local log holds the 2000 most recent
 applications.
+
+## The hosted dashboard
+
+The dashboard also runs as a plain web page, with no install:
+
+```sh
+npm run serve      # then open http://localhost:8731/
+```
+
+Or deploy it. `vercel.json` serves the repo root and rewrites `/` to the landing
+page and `/app` to the dashboard:
+
+```sh
+npx vercel deploy --prod
+```
+
+The hosted build reads a copy kept in that browser's `localStorage`, so export a
+CSV from the extension and import it to browse your data on a machine without the
+extension. Capture, sponsorship scanning, reminders and Sheets sync need the
+extension — they have to run in the browser on the Handshake page — and the
+settings that depend on them are hidden automatically.
+
+The same `app/app.html`, `app/app.js` and `shared/utils.js` serve both. The only
+difference is `app/data-source.js`, which picks a storage backend based on
+whether `chrome.runtime.id` exists.
 
 ## Optional: Google Sheets sync
 
@@ -124,6 +164,12 @@ The only thing Google charges for anywhere near this is the $5 one-time fee to
 
 What the setup buys you is an OAuth client, which is the only way Google will
 hand out access to your own spreadsheet.
+
+**Sharing with someone else:** because the extension ID is pinned, one OAuth
+client covers every install. Create it once, commit the client ID, and add their
+Google address under **Test users** on the consent screen. They load the
+extension and click Connect — no Cloud Console for them. The consent screen
+allows 100 test users while unverified.
 
 ### 1. Get the extension ID
 
@@ -265,9 +311,12 @@ content/selectors.js   every Handshake selector, all in one place
 content/content.js     detection, scraping, the confirmation overlay
 app/                   the dashboard: views, charts, settings
 popup/                 toolbar popup: manual log, quick stats, dashboard launcher
+app/data-source.js     storage backend: extension worker or localStorage
+web/index.html         landing page for the hosted build
 icons/                 generated, don't hand-edit
 tools/make-icons.js    regenerates icons/ (npm run icons)
 test/utils.test.js     unit tests (npm test)
+test/browser.html      browser integration suite
 ```
 
 ## Architecture
@@ -281,10 +330,20 @@ boundaries, per-user isolation, and the cost analysis at scale.
 npm test
 ```
 
-173 tests over the pure logic in `shared/utils.js`: date normalization,
+```sh
+npm test           # 226 unit tests, no dependencies, no browser
+npm run serve      # then open http://localhost:8731/test/browser.html
+```
+
+The unit tests cover the pure logic in `shared/utils.js`: date normalization,
 sponsorship classification, formula escaping, spreadsheet ID parsing, column
-ordering, dedupe pruning, stats, CSV/TSV export. No dependencies, no network,
-no browser.
+ordering, dedupe pruning, stats, CSV/TSV export, the import parser and merge.
+
+The browser suite is 50 integration tests that drive the real dashboard in an
+iframe against real `localStorage` — KPI arithmetic, chart geometry, filters,
+sorting, search, status writes, delete and undo, import, theme persistence,
+routing, the empty state, and corrupt-storage handling. It needs no test hooks in
+production code.
 
 Everything that needs a real browser — scraping, submission detection, OAuth,
 the retry queue — is in [TESTPLAN.md](TESTPLAN.md) as a manual checklist.

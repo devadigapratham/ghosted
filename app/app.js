@@ -2,12 +2,12 @@
 // if one is connected, otherwise the local log) and writes status changes back
 // to the same place.
 const U = globalThis.GHOSTED;
+const DS = globalThis.GHOSTED_DATA;
 const $ = (id) => document.getElementById(id);
-const ask = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
 
-const VIEWS = ["dashboard", "pipeline", "jobs", "deadlines", "settings"];
+const VIEWS = ["dashboard", "attention", "pipeline", "jobs", "deadlines", "settings"];
 const CHECKBOXES = ["autoCapture", "remindersEnabled", "needsSponsorship", "showSponsorshipChip"];
-const NUMBERS = ["followUpDays", "ghostAfterDays"];
+const NUMBERS = ["followUpDays", "ghostAfterDays", "weeklyGoal"];
 
 // Sponsorship verdicts carry an icon as well as a colour, so the meaning never
 // rests on hue alone.
@@ -47,13 +47,14 @@ const sponsorOf = (row) => {
 
 // ── Data ──
 async function load() {
-  settings = await chrome.storage.sync.get(U.DEFAULT_SETTINGS);
-  const resp = await ask({ type: "getRows" });
+  settings = await DS.getSettings();
+  const resp = await DS.getRows();
   rows = resp?.rows || [];
   source = resp?.source || "local";
 
   const badge = $("sourceBadge");
   if (resp?.stale) badge.textContent = "sheet unreachable · showing local copy";
+  else if (DS.env === "web") badge.textContent = "stored in this browser";
   else badge.textContent = source === "sheet" ? "synced with your sheet" : "stored on this machine";
 
   renderAll();
@@ -62,6 +63,7 @@ async function load() {
 function renderAll() {
   fillSettings();
   renderDashboard();
+  renderAttention();
   renderPipeline();
   renderJobs();
   renderDeadlines();
@@ -73,7 +75,8 @@ function renderAll() {
     pill.hidden = !n;
   };
   setPill("jobsCount", rows.length);
-  setPill("dueCount", followUps().length);
+  setPill("dueCount", upcomingDeadlines().length);
+  setPill("attnCount", U.needsAttention(rows, settings).length);
 }
 
 const today = () => U.todayISO();
@@ -115,6 +118,15 @@ function renderDashboard() {
     { k: "Ghosted", v: s.ghosted, n: `silent ${settings.ghostAfterDays}+ days` },
     { k: "Heard back", v: `${s.responseRate}%`, n: "got any reply" },
   ];
+
+  const goal = U.weekProgress(rows, settings.weeklyGoal, today());
+  if (goal.goal > 0) {
+    kpis.splice(2, 0, {
+      k: "Weekly goal",
+      v: `${goal.count}/${goal.goal}`,
+      n: goal.met ? "hit it" : `${goal.goal - goal.count} to go`,
+    });
+  }
 
   const box = $("kpis");
   box.textContent = "";
@@ -382,13 +394,7 @@ function statusSelect(row, onDone) {
   sel.addEventListener("change", async () => {
     const previous = row.Status;
     row.Status = sel.value;
-    const resp = await ask({
-      type: "setStatus",
-      source,
-      rowNumber: row._rowNumber,
-      id: row.id,
-      status: sel.value,
-    });
+    const resp = await DS.setStatus(row, sel.value, source);
     if (!resp?.ok) {
       row.Status = previous;
       sel.value = previous || "Applied";
@@ -536,14 +542,10 @@ function renderJobs() {
     tr.appendChild(stTd);
 
     const delTd = document.createElement("td");
-    if (source === "local" && r.id) {
+    if (r.id) {
       const del = el("button", "rowbtn", "✕");
       del.title = "Delete from the local log";
-      del.addEventListener("click", async () => {
-        await ask({ type: "deleteApplication", id: r.id });
-        rows = rows.filter((x) => x.id !== r.id);
-        renderAll();
-      });
+      del.addEventListener("click", () => deleteWithUndo(r));
       delTd.appendChild(del);
     }
     tr.appendChild(delTd);
@@ -561,13 +563,119 @@ function renderDeadlines() {
   }));
 }
 
+// ── Needs attention ──
+// One list answering "what should I do now", instead of three places to look.
+const ATTENTION_LABEL = {
+  deadline: "Deadline",
+  followup: "Follow up",
+  stale: "No reply",
+};
+
+function renderAttention() {
+  const items = U.needsAttention(rows, settings, today());
+  const host = $("attentionList");
+  host.textContent = "";
+
+  $("attentionEmpty").hidden = items.length > 0;
+  if (!items.length) return;
+
+  for (const { row, kind, label } of items) {
+    const item = el("div", "item");
+    const tag = el("span", `tag tag-${kind}`, ATTENTION_LABEL[kind]);
+    const who = el("span", "who", `${row.Company || "—"} · ${row.Position || "—"}`);
+    const when = el("span", "when" + (kind !== "deadline" ? " overdue" : ""), label);
+    item.append(tag, who, when);
+    host.appendChild(item);
+  }
+}
+
+// ── Delete with undo ──
+// Deleting the wrong row is easy and a confirm() dialog on every row is worse
+// than an undo, so the row is held for 8 seconds and can be put back.
+let undoTimer;
+let undoRow = null;
+
+async function deleteWithUndo(row) {
+  const resp = await DS.deleteRow(row);
+  if (!resp?.ok) return;
+
+  rows = rows.filter((r) => r.id !== row.id);
+  undoRow = row;
+  renderAll();
+
+  const bar = $("undoBar");
+  $("undoText").textContent = `Deleted ${row.Company || "row"} · ${row.Position || ""}`.trim();
+  bar.hidden = false;
+
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => {
+    bar.hidden = true;
+    undoRow = null;
+  }, 8000);
+}
+
+$("undoBtn").addEventListener("click", async () => {
+  if (!undoRow) return;
+  await DS.restoreRow(undoRow);
+  undoRow = null;
+  $("undoBar").hidden = true;
+  clearTimeout(undoTimer);
+  load();
+});
+
+// ── Import ──
+function readFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Couldn't read that file"));
+    reader.readAsText(file);
+  });
+}
+
+async function importFile(file) {
+  let text;
+  try {
+    text = await readFile(file);
+  } catch (e) {
+    return setStatusText("exportStatus", e.message, "err");
+  }
+
+  const { rows: parsed, error } = U.parseImport(text, file.name);
+  if (error) return setStatusText("exportStatus", error, "err");
+  if (!parsed.length) return setStatusText("exportStatus", "Nothing importable in that file", "err");
+
+  const resp = await DS.importRows(parsed);
+  if (!resp?.ok) return setStatusText("exportStatus", resp?.error || "Import failed", "err");
+
+  const skipped = resp.skipped ? `, ${resp.skipped} already there` : "";
+  setStatusText("exportStatus", `Imported ${resp.added}${skipped}`, "ok");
+  load();
+  return undefined;
+}
+
+$("importBtn").addEventListener("click", () => $("importInput").click());
+$("importInput").addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (file) importFile(file);
+  e.target.value = ""; // let the same file be picked twice
+});
+
 // ── Settings ──
 function fillSettings() {
+  // The web build has no worker, so nothing that needs one is shown.
+  for (const [cap, id] of [["sheets", "sheetsSection"], ["capture", "captureSection"], ["reminders", "remindersSection"]]) {
+    const node = $(id);
+    if (node) node.hidden = !DS.can[cap];
+  }
+  const webNote = $("webNote");
+  if (webNote) webNote.hidden = DS.env !== "web";
+
   $("sheetUrl").value = settings.spreadsheetId || "";
   $("sheetName").value = settings.sheetName || "Sheet1";
   $("roleOptions").value = (settings.roleOptions || []).join(", ");
   for (const id of CHECKBOXES) $(id).checked = Boolean(settings[id]);
-  for (const id of NUMBERS) $(id).value = settings[id];
+  for (const id of NUMBERS) $(id).value = settings[id] ?? U.DEFAULT_SETTINGS[id];
 }
 
 function readNumber(id) {
@@ -599,8 +707,9 @@ async function saveSettings() {
   };
   for (const id of CHECKBOXES) next[id] = $(id).checked;
   for (const id of NUMBERS) next[id] = readNumber(id);
+  next.weeklyGoal = readNumber("weeklyGoal");
 
-  await chrome.storage.sync.set(next);
+  await DS.saveSettings(next);
   settings = { ...settings, ...next };
   if (spreadsheetId) $("sheetUrl").value = spreadsheetId;
   for (const id of NUMBERS) $(id).value = next[id];
@@ -634,7 +743,7 @@ function showHeaderResult(resp) {
 }
 
 async function refreshQueue() {
-  const resp = await ask({ type: "getQueue" });
+  const resp = await DS.getQueue();
   $("queueCount").textContent = resp?.count ?? "0";
   const err = $("queueError");
   err.hidden = !resp?.lastError;
@@ -669,7 +778,7 @@ window.addEventListener("hashchange", () => show(currentView()));
 
 // ── Theme ──
 async function initTheme() {
-  const { theme } = await chrome.storage.local.get({ theme: "" });
+  const theme = await DS.getTheme();
   if (theme) document.documentElement.dataset.theme = theme;
 }
 
@@ -680,7 +789,7 @@ $("themeBtn").addEventListener("click", async () => {
     : matchMedia("(prefers-color-scheme: dark)").matches;
   const next = isDark ? "light" : "dark";
   root.dataset.theme = next;
-  await chrome.storage.local.set({ theme: next });
+  await DS.setTheme(next);
   // Marks are CSS-variable driven, so the charts need re-reading of nothing —
   // but the tooltip may be mid-flight.
   hideTip();
@@ -740,17 +849,17 @@ $("connectBtn").addEventListener("click", async () => {
     return;
   }
   setStatusText("connectStatus", "Connecting…");
-  showHeaderResult(await ask({ type: "connectGoogle" }));
+  showHeaderResult(await DS.connectGoogle());
   load();
 });
 
 $("openSheetBtn").addEventListener("click", async () => {
-  const resp = await ask({ type: "openSheet" });
-  if (!resp?.ok) setStatusText("connectStatus", "No sheet configured", "err");
+  const resp = await DS.openSheet();
+  if (!resp?.ok) setStatusText("connectStatus", resp?.error || "No sheet configured", "err");
 });
 
 $("retryBtn").addEventListener("click", async () => {
-  await ask({ type: "retryQueue" });
+  await DS.retryQueue();
   refreshQueue();
   load();
 });
@@ -769,11 +878,51 @@ $("clearBtn").addEventListener("click", async () => {
     }, 5000);
     return;
   }
-  await ask({ type: "clearApplications" });
+  await DS.clearAll();
   btn.dataset.armed = "";
   btn.textContent = "Delete all local applications";
   setStatusText("clearStatus", "Local log cleared", "ok");
   load();
+});
+
+// ── Keyboard ──
+// "/" to search, g+letter to jump, ? for the list. Ignored while typing.
+const GOTO = { d: "dashboard", a: "attention", p: "pipeline", j: "jobs", l: "deadlines", s: "settings" };
+let awaitingGoto = false;
+
+document.addEventListener("keydown", (e) => {
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  if (e.key === "Escape") {
+    awaitingGoto = false;
+    $("shortcutHelp").hidden = true;
+    if (typing) e.target.blur();
+    return;
+  }
+  if (typing) return;
+
+  if (awaitingGoto) {
+    awaitingGoto = false;
+    const view = GOTO[e.key.toLowerCase()];
+    if (view) {
+      e.preventDefault();
+      location.hash = `#${view}`;
+    }
+    return;
+  }
+
+  if (e.key === "/") {
+    e.preventDefault();
+    $("search").focus();
+  } else if (e.key === "?") {
+    e.preventDefault();
+    $("shortcutHelp").hidden = !$("shortcutHelp").hidden;
+  } else if (e.key.toLowerCase() === "g") {
+    awaitingGoto = true;
+  } else if (e.key.toLowerCase() === "r") {
+    load();
+  }
 });
 
 initTheme();

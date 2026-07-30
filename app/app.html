@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <title>Ghosted</title>
-  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="/app/app.css">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <img src="../icons/icon32.png" alt="" width="20" height="20">
+      <img src="/icons/icon32.png" alt="" width="20" height="20">
       <span>Ghosted</span>
     </div>
     <input id="search" type="search" placeholder="Search company, position, notes…" aria-label="Search applications">
@@ -22,14 +22,18 @@
   <div class="shell">
     <nav class="sidebar">
       <a href="#dashboard" data-view="dashboard" class="navlink">Dashboard</a>
+      <a href="#attention" data-view="attention" class="navlink">Needs attention <span id="attnCount" class="pill"></span></a>
       <a href="#pipeline" data-view="pipeline" class="navlink">Pipeline</a>
       <a href="#jobs" data-view="jobs" class="navlink">All jobs <span id="jobsCount" class="pill"></span></a>
       <a href="#deadlines" data-view="deadlines" class="navlink">Deadlines <span id="dueCount" class="pill"></span></a>
       <a href="#settings" data-view="settings" class="navlink">Settings</a>
       <div class="navfoot">
+        <button id="importBtn" class="ghost wide">↑ Import CSV / JSON</button>
+        <input id="importInput" type="file" accept=".csv,.tsv,.txt,.json" hidden>
         <button id="exportCsvBtn" class="ghost wide">↓ Export CSV</button>
         <button id="copyTsvBtn" class="ghost wide">⧉ Copy for sheet</button>
         <p id="exportStatus" class="tiny"></p>
+        <p class="tiny">Press <kbd>?</kbd> for shortcuts</p>
       </div>
     </nav>
 
@@ -40,6 +44,7 @@
           <h2>Nothing logged yet</h2>
           <p>Open a job on Handshake and hit <strong>＋ Log this job</strong>, or just apply to
              something — Ghosted picks it up on its own.</p>
+          <p class="sub">Already have a spreadsheet? Use <strong>Import CSV / JSON</strong> in the sidebar.</p>
         </div>
 
         <div id="dashContent">
@@ -86,6 +91,16 @@
               <div id="deadlineList" class="list"></div>
             </section>
           </div>
+        </div>
+      </section>
+
+      <!-- Needs attention -->
+      <section id="view-attention" class="view" hidden>
+        <h2>Needs attention</h2>
+        <p class="sub">Closing deadlines, overdue follow-ups, and applications that have gone quiet.</p>
+        <div class="card">
+          <div id="attentionList" class="list"></div>
+          <p id="attentionEmpty" class="note" hidden>Nothing needs doing right now.</p>
         </div>
       </section>
 
@@ -158,7 +173,7 @@
           </p>
         </section>
 
-        <section class="card">
+        <section class="card" id="captureSection">
           <h3>Capture</h3>
           <label class="check"><input id="autoCapture" type="checkbox">
             Auto-detect application submissions</label>
@@ -166,7 +181,7 @@
           <input id="roleOptions" type="text" placeholder="SWE, Data, PM, Research, Other">
         </section>
 
-        <section class="card">
+        <section class="card" id="remindersSection">
           <h3>Follow-ups</h3>
           <label class="check"><input id="remindersEnabled" type="checkbox">
             Remind me daily about applications that have gone quiet</label>
@@ -176,12 +191,25 @@
           <input id="ghostAfterDays" type="number" min="1" max="365" class="narrow">
         </section>
 
+        <section class="card">
+          <h3>Weekly goal</h3>
+          <p class="sub">Applications per week to aim for. Set 0 to hide the tile.</p>
+          <label for="weeklyGoal">Target per week</label>
+          <input id="weeklyGoal" type="number" min="0" max="200" class="narrow">
+        </section>
+
+        <p id="webNote" class="note" hidden>
+          You're on the hosted version, which reads a copy stored in this browser.
+          Capture, reminders and Sheets sync live in the extension. Import a CSV to
+          look at your data here.
+        </p>
+
         <div class="row">
           <button id="saveBtn" class="primary">Save settings</button>
           <span id="saveStatus" class="status"></span>
         </div>
 
-        <section class="card">
+        <section class="card" id="sheetsSection">
           <h3>Google Sheets sync <span class="badge">optional</span></h3>
           <p class="sub">
             Not required — everything works without it. Connecting a sheet mirrors each
@@ -217,8 +245,29 @@
     </main>
   </div>
 
+  <div id="undoBar" class="undobar" hidden>
+    <span id="undoText"></span>
+    <button id="undoBtn" class="ghost">Undo</button>
+  </div>
+
+  <div id="shortcutHelp" class="shortcuts" hidden>
+    <h3>Shortcuts</h3>
+    <dl>
+      <dt><kbd>/</kbd></dt><dd>search</dd>
+      <dt><kbd>g</kbd> <kbd>d</kbd></dt><dd>dashboard</dd>
+      <dt><kbd>g</kbd> <kbd>a</kbd></dt><dd>needs attention</dd>
+      <dt><kbd>g</kbd> <kbd>p</kbd></dt><dd>pipeline</dd>
+      <dt><kbd>g</kbd> <kbd>j</kbd></dt><dd>all jobs</dd>
+      <dt><kbd>g</kbd> <kbd>l</kbd></dt><dd>deadlines</dd>
+      <dt><kbd>g</kbd> <kbd>s</kbd></dt><dd>settings</dd>
+      <dt><kbd>r</kbd></dt><dd>reload data</dd>
+      <dt><kbd>?</kbd></dt><dd>this list</dd>
+    </dl>
+  </div>
+
   <div id="tooltip" class="tooltip" hidden></div>
-  <script src="../shared/utils.js"></script>
-  <script src="app.js"></script>
+  <script src="/shared/utils.js"></script>
+  <script src="/app/data-source.js"></script>
+  <script src="/app/app.js"></script>
 </body>
 </html>

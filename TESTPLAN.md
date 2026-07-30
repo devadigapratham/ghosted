@@ -1,19 +1,21 @@
 # Manual test plan
 
-For the parts that need a real browser. The pure logic is covered by
-`npm test`.
+For the parts that need a real browser and a real Handshake page. Pure logic is
+covered by `npm test` (226 tests) and the dashboard by the browser suite
+(50 tests, `npm run serve` then `/test/browser.html`) — run both before working
+through this.
 
 Before starting: extension loaded. Most of this needs no Google account —
 applications are saved locally either way. The ones that need a connected sheet
-say so: 11, 15, 19, 21, 25.
+say so: 11, 19, 23, 25, 29.
 
 Worker logs are at `chrome://extensions` → the card → **service worker**.
 Content script logs show up in the normal page DevTools console.
 
 Suggested order — cheapest and most reversible first: 4 (manual triggers), 13
-(local mode), 12 (dashboard), 6 (sponsorship), 14 (export), 23 (formula
-injection), 17 (offline queue), 18 (duplicates), then 1 and 3 which need real
-applications, and 19 last since it revokes access.
+(local mode), 12 (dashboard), 6 (sponsorship), 14 (import), 18 (export), 27
+(formula injection), 21 (offline queue), 22 (duplicates), then 1 and 3 which need
+real applications, and 23 last since it revokes access.
 
 ## 1. Native apply
 
@@ -169,7 +171,47 @@ The default path. Run this with the sheet fields left blank.
 4. Delete a row with the ✕ button. Expect it gone from the table and the totals.
 5. Popup with no sheet configured: expect stats to still work.
 
-## 14. Export
+## 14. Import
+
+1. Export a CSV, delete a row, then import that CSV back. Expect the deleted row
+   to return and the rest to be reported as already present.
+2. Import the same file twice. Expect the second run to add 0 and skip all.
+3. Set a status by hand, then re-import a CSV containing that row with a
+   different status. Expect your value to survive — import never overwrites.
+4. Import a sheet with the columns rearranged and lowercased headers. Expect it
+   to load anyway.
+5. Import a file with no recognizable headers. Expect a clear error and no rows
+   added.
+6. Import a JSON backup. Expect the same behaviour as CSV.
+
+## 15. Undo delete
+
+1. Delete a row from All jobs. Expect it to vanish, the totals to update, and an
+   undo bar to appear naming the row.
+2. Click **Undo**. Expect the row back.
+3. Delete another and wait ~8 seconds. Expect the bar to disappear on its own,
+   with the row still deleted.
+4. On a fresh reload, expect no undo bar visible.
+
+## 16. Keyboard shortcuts
+
+1. Press <kbd>?</kbd>. Expect the shortcut list; <kbd>?</kbd> or Esc closes it.
+2. <kbd>/</kbd> focuses search. Typing "g" into the box must type a letter, not
+   navigate.
+3. <kbd>g</kbd> then <kbd>j</kbd> goes to All jobs; <kbd>g</kbd> <kbd>a</kbd> to
+   Needs attention.
+4. <kbd>r</kbd> reloads the data.
+
+## 17. Hosted dashboard
+
+1. `npm run serve`, open `http://localhost:8731/`. Expect the landing page.
+2. Open `/app/app.html`. Expect the dashboard, the badge reading "stored in this
+   browser", and Settings to hide the Sheets, Capture and Follow-ups sections.
+3. Import a CSV exported from the extension. Expect the dashboard to populate.
+4. Change a status, reload the page. Expect it to persist.
+5. Confirm the extension's own copy is untouched — the two stores are separate.
+
+## 18. Export
 
 1. **Download CSV** with a few rows logged. Expect a `ghosted-YYYY-MM-DD.csv`
    file whose first line is the 21 column headers.
@@ -182,7 +224,7 @@ The default path. Run this with the sheet fields left blank.
    empty file.
 5. Confirm no `id`, `savedAt` or `synced` column appears in either export.
 
-## 15. Nothing is lost when the sheet fails (needs a sheet)
+## 19. Nothing is lost when the sheet fails (needs a sheet)
 
 Verifies that saving locally first actually protects the row.
 
@@ -193,14 +235,14 @@ Verifies that saving locally first actually protects the row.
 3. Fix the tab name, hit **Retry now**. Expect the row to reach the sheet and
    the badge to clear, with no duplicate in the local log.
 
-## 16. Delete-all guard
+## 20. Delete-all guard
 
 1. Click **Delete all local applications** once. Expect the button to change to
    "Click again to permanently delete" and nothing to be deleted.
 2. Wait six seconds. Expect it to reset itself.
 3. Click twice in quick succession. Expect the log to be cleared.
 
-## 17. Offline queue
+## 21. Offline queue
 
 1. Open the overlay, then go offline (DevTools → Network → Offline, or turn off
    Wi-Fi).
@@ -209,14 +251,14 @@ Verifies that saving locally first actually protects the row.
 3. Go back online. Within ~2 minutes, or immediately via popup → "Retry queued
    rows now", the row appears and the badge clears.
 
-## 18. Duplicates
+## 22. Duplicates
 
 1. Log a job, then trigger **Log this job** on the same job again.
 2. Expect the amber "You already logged this job on YYYY-MM-DD" banner, and the
    button now reads **Save anyway**.
 3. Esc → no row. Save anyway → duplicate row appended.
 
-## 19. Token expiry and re-auth (needs a sheet)
+## 23. Token expiry and re-auth (needs a sheet)
 
 1. Revoke access at <https://myaccount.google.com/permissions>, or just wait an
    hour for the access token to expire.
@@ -225,39 +267,39 @@ Verifies that saving locally first actually protects the row.
    consent window opens, and the row saves after you approve.
 3. Dismiss the consent window instead. Expect the row to be queued, not lost.
 
-## 20. Missing optional fields
+## 24. Missing optional fields
 
 1. Find a job with no salary and no industry listed.
 2. Trigger a log. Expect both blank (not guessed), highlighted amber with
    "couldn't auto-detect", and focus on the first missing field. Saving writes
    the blanks as-is.
 
-## 21. Sheet verification (needs a sheet)
+## 25. Sheet verification (needs a sheet)
 
 1. Point the options page at an **empty** tab → Connect. Expect "header row
    written" and A1:U1 filled in.
 2. Point at a tab with a **different** header → Connect. Expect the mismatch
    warning listing expected vs. found, and no change to the sheet.
 
-## 22. School subdomain
+## 26. School subdomain
 
 1. Use your school's subdomain (`myschool.joinhandshake.com`) rather than
    `app.joinhandshake.com`.
 2. Expect the floating button to appear and everything above to work.
 
-## 23. Formula injection
+## 27. Formula injection
 
 1. Log a job with Notes set to `=1+2`.
 2. Expect the cell to read `=1+2` as literal text (stored as `'=1+2`), not `3`.
 
-## 24. Posted-date sanity
+## 28. Posted-date sanity
 
 1. Find a job whose posted date shows as a bare month and day ("Jul 5") rather
    than a relative "3 days ago".
 2. Expect the current year, not 2001. This is the case `npm test` covers, worth
    one real-page confirmation.
 
-## 25. Quota and permission errors (needs a sheet)
+## 29. Quota and permission errors (needs a sheet)
 
 Hard to trigger for real. To simulate: point the options page at a sheet you
 can't edit, save a row, and expect it to queue with the badge showing and the

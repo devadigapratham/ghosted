@@ -69,6 +69,8 @@
     // whether an unsponsored posting is worth warning about at all.
     needsSponsorship: true,
     showSponsorshipChip: true,
+    // Applications per week to aim for; 0 hides the tile.
+    weeklyGoal: 10,
   };
 
   const DEDUPE_MAX_AGE_DAYS = 365;

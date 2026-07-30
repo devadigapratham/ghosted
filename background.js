@@ -481,6 +481,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return { ok: false, error: e.message };
         }
 
+      case "importApplications": {
+        const apps = await getLocal("applications", []);
+        const stamped = (msg.rows || []).map((row) => ({
+          ...row,
+          id: crypto.randomUUID(),
+          savedAt: Date.now(),
+          synced: false,
+        }));
+        const { merged, added, skipped } = U.mergeApplications(apps, stamped);
+        await chrome.storage.local.set({ applications: merged.slice(-U.APPLICATIONS_MAX) });
+        return { ok: true, added, skipped };
+      }
+
+      case "restoreApplication": {
+        const apps = await getLocal("applications", []);
+        if (!apps.some((a) => a.id === msg.row?.id)) apps.push(msg.row);
+        await chrome.storage.local.set({ applications: apps });
+        return { ok: true };
+      }
+
       case "updateApplication":
         return updateApplication(msg.id, msg.changes || {});
 

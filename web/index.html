@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghosted — Handshake application tracker</title>
+  <meta name="description" content="Logs every job you apply to on Handshake, flags visa-sponsorship blockers before you apply, and keeps the data on your own machine.">
+  <link rel="icon" href="/icons/icon32.png">
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f9f9f7; --surface: #fcfcfb;
+      --text: #0b0b0b; --muted: #52514e; --faint: #898781;
+      --border: rgba(11,11,11,.10);
+      --accent: #1b7f4d; --warn: #d03b3b;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #0d0d0d; --surface: #1a1a19;
+        --text: #fff; --muted: #c3c2b7; --faint: #898781;
+        --border: rgba(255,255,255,.10);
+        --accent: #229a5e;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--page); color: var(--text);
+      font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 56px 20px 80px; }
+    .hero { display: flex; align-items: center; gap: 14px; }
+    .hero img { width: 44px; height: 44px; }
+    h1 { font-size: 34px; margin: 0; letter-spacing: -.02em; }
+    .tag { font-size: 18px; color: var(--muted); margin: 14px 0 0; }
+    .cta { display: flex; gap: 10px; flex-wrap: wrap; margin: 28px 0 0; }
+    a.btn {
+      display: inline-block; padding: 10px 18px; border-radius: 8px;
+      text-decoration: none; font-size: 15px; font-weight: 600;
+      border: 1px solid var(--border); color: var(--text); background: var(--surface);
+    }
+    a.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    a.btn:hover { filter: brightness(1.06); }
+    h2 { font-size: 20px; margin: 44px 0 10px; }
+    p, li { color: var(--muted); }
+    ul { padding-left: 20px; }
+    li { margin: 6px 0; }
+    strong { color: var(--text); }
+    img.shot {
+      width: 100%; border: 1px solid var(--border); border-radius: 10px;
+      margin: 20px 0 0; display: block;
+    }
+    .note {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 16px; font-size: 14px; margin: 20px 0 0;
+    }
+    .warn { border-left: 3px solid var(--warn); }
+    ol { padding-left: 20px; color: var(--muted); }
+    code {
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; padding: 1px 5px;
+    }
+    footer {
+      margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border);
+      font-size: 14px; color: var(--faint);
+    }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="hero">
+      <img src="/icons/icon128.png" alt="">
+      <h1>Ghosted</h1>
+    </div>
+    <p class="tag">
+      Logs every job you apply to on Handshake, so you know exactly who ghosted you.
+    </p>
+
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/devadigapratham/ghosted">Get it on GitHub</a>
+      <a class="btn" href="/app">Open the dashboard</a>
+    </div>
+
+    <img class="shot" src="/docs/dashboard-dark.jpg" alt="The Ghosted dashboard showing application counts, a per-week chart, and a sponsorship breakdown">
+
+    <h2>What it does</h2>
+    <ul>
+      <li><strong>Logs applications automatically.</strong> Apply on Handshake and a
+        confirmation box appears pre-filled. Press Enter and it's recorded.</li>
+      <li><strong>Flags sponsorship before you apply.</strong> It reads the job
+        description and badges the page: sponsors, no sponsorship, citizens/PR only,
+        or unclear — with the exact sentence it matched, so you can judge yourself.</li>
+      <li><strong>Chases follow-ups.</strong> Every application gets a follow-up date,
+        and a daily check tells you what's gone quiet.</li>
+      <li><strong>Shows the damage.</strong> How many applied, how many interviews,
+        how many ghosted, and what share ever replied.</li>
+    </ul>
+
+    <h2>Where the data lives</h2>
+    <p>
+      On your machine. There's no server, no account, and no signup, so there's
+      nothing to breach and nothing to bill you for. Connect a Google Sheet if you
+      want a copy you can share or open on your phone — it's your sheet, in your
+      Google account.
+    </p>
+
+    <h2>The hosted dashboard</h2>
+    <p>
+      <a href="/app">The dashboard</a> also runs here, with no install. It reads a
+      copy kept in this browser, so export a CSV from the extension and import it to
+      browse your data on a machine that doesn't have the extension.
+    </p>
+    <div class="note warn">
+      Capture, sponsorship scanning, reminders and Sheets sync need the extension —
+      they have to run inside the browser on the Handshake page. The hosted version is
+      for reading and editing what you already collected.
+    </div>
+
+    <h2>Install</h2>
+    <ol>
+      <li>Clone or download <a href="https://github.com/devadigapratham/ghosted">the repo</a>.</li>
+      <li>Open <code>chrome://extensions</code>, turn on Developer mode.</li>
+      <li><strong>Load unpacked</strong>, pick the folder.</li>
+      <li>Apply to a job.</li>
+    </ol>
+    <p>
+      Google Sheets sync is optional and needs a one-time OAuth client; the README
+      walks through it. Everything else works immediately.
+    </p>
+
+    <footer>
+      MIT licensed ·
+      <a href="https://github.com/devadigapratham/ghosted">Source</a> ·
+      <a href="https://github.com/devadigapratham/ghosted/blob/main/ARCHITECTURE.md">Architecture</a>
+    </footer>
+  </main>
+</body>
+</html>

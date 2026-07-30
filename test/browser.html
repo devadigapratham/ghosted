@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ghosted — browser tests</title>
+  <style>
+    body { margin: 0; padding: 20px; font: 14px/1.5 system-ui, sans-serif; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .sub { color: #666; font-size: 13px; margin: 0 0 16px; }
+    #summary { font-weight: 700; margin: 12px 0; font-size: 15px; }
+    #summary.pass { color: #0a7d3c; }
+    #summary.fail { color: #c0322f; }
+    ol { padding-left: 22px; margin: 0; }
+    li { margin: 2px 0; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+    li.ok { color: #0a7d3c; }
+    li.bad { color: #c0322f; font-weight: 700; }
+    iframe { width: 1200px; height: 700px; border: 1px solid #ccc; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Ghosted browser tests</h1>
+  <p class="sub">
+    Drives the real <code>/app/app.html</code> in the frame below against real
+    <code>localStorage</code>. No production code knows this page exists.
+  </p>
+  <div id="summary">running…</div>
+  <ol id="results"></ol>
+  <iframe id="frame" title="app under test"></iframe>
+
+<script src="/shared/utils.js"></script>
+<script>
+(async () => {
+  const U = globalThis.GHOSTED;
+  const results = [];
+  const KEY = "ghosted.applications";
+
+  const record = (name, error) => {
+    results.push({ name, ok: !error, error: error ? String(error.message || error) : "" });
+    const li = document.createElement("li");
+    li.className = error ? "bad" : "ok";
+    li.textContent = `${error ? "FAIL" : "ok  "}  ${name}${error ? " — " + (error.message || error) : ""}`;
+    document.getElementById("results").appendChild(li);
+  };
+
+  const check = (name, fn) => {
+    try { fn(); record(name); } catch (e) { record(name, e); }
+  };
+
+  const eq = (actual, expected, what = "") => {
+    if (actual !== expected) {
+      throw new Error(`${what || "value"}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
+    }
+  };
+  const ok = (cond, msg) => { if (!cond) throw new Error(msg || "expected truthy"); };
+
+  // ── Fixture ──
+  const pad = (n) => String(n).padStart(2, "0");
+  const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const daysAgo = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
+  const daysAhead = (n) => daysAgo(-n);
+
+  const blank = () => Object.fromEntries(U.COLUMNS.map((c) => [c, ""]));
+  const app = (over) => ({ ...blank(), ...over });
+
+  // Deterministic set with one row per interesting case.
+  const FIXTURE = [
+    app({ id: "a1", Company: "Acme", Position: "SWE Intern", Status: "Applied",
+          "Date Applied": daysAgo(1), Sponsorship: "Sponsors", "Job Type": "Internship",
+          "Follow-up On": daysAhead(13), "Job ID": "1001" }),
+    app({ id: "a2", Company: "Globex", Position: "Data Intern", Status: "Applied",
+          "Date Applied": daysAgo(40), Sponsorship: "No sponsorship", "Job Type": "Internship",
+          "Follow-up On": daysAgo(26), "Job ID": "1002" }),
+    app({ id: "a3", Company: "Initech", Position: "PM Intern", Status: "Interviewing",
+          "Date Applied": daysAgo(10), Sponsorship: "Citizens/PR only", "Job Type": "Co-op",
+          Deadline: daysAhead(3), "Job ID": "1003" }),
+    app({ id: "a4", Company: "Hooli", Position: "ML Intern", Status: "Offer",
+          "Date Applied": daysAgo(3), Sponsorship: "Unclear", "Job Type": "New grad", "Job ID": "1004" }),
+    app({ id: "a5", Company: "Umbrella", Position: "Backend", Status: "Rejected",
+          "Date Applied": daysAgo(5), Sponsorship: "Sponsors", "Job Type": "Full-time", "Job ID": "1005" }),
+  ];
+
+  localStorage.setItem(KEY, JSON.stringify(FIXTURE));
+  localStorage.removeItem("ghosted.settings");
+  localStorage.removeItem("ghosted.theme");
+
+  // ── Boot the app ──
+  const frame = document.getElementById("frame");
+  let boots = 0;
+  const load = (hash) => new Promise((resolve) => {
+    // The cache-buster guarantees a real navigation; without it, re-assigning
+    // the same src only changes the hash and no load event fires.
+    boots += 1;
+    frame.onload = () => setTimeout(resolve, 250); // let the async load() finish
+    frame.src = `/app/app.html?boot=${boots}${hash || ""}`;
+  });
+
+  await load("#dashboard");
+  let doc = frame.contentDocument;
+  let win = frame.contentWindow;
+  const $ = (id) => doc.getElementById(id);
+  const txt = (id) => ($(id)?.textContent || "").trim();
+
+  // ── Environment ──
+  check("web build selects the web data source", () => {
+    eq(win.GHOSTED_DATA.env, "web");
+  });
+
+  check("web build reports no sheets/capture/reminders capability", () => {
+    eq(win.GHOSTED_DATA.can.sheets, false, "sheets");
+    eq(win.GHOSTED_DATA.can.capture, false, "capture");
+    eq(win.GHOSTED_DATA.can.reminders, false, "reminders");
+  });
+
+  check("extension-only settings sections are hidden on web", () => {
+    ok($("sheetsSection").hidden, "sheets section should be hidden");
+    ok($("captureSection").hidden, "capture section should be hidden");
+    ok($("remindersSection").hidden, "reminders section should be hidden");
+  });
+
+  check("web note is shown", () => ok(!$("webNote").hidden));
+
+  check("source badge says where data lives", () => {
+    ok(/this browser/i.test(txt("sourceBadge")), `got "${txt("sourceBadge")}"`);
+  });
+
+  // ── Loading ──
+  check("all fixture rows loaded", () => eq(win.GHOSTED_DATA ? doc.querySelectorAll("#jobsRows tr").length : 0, 5));
+
+  check("empty state is hidden when rows exist", () => ok($("emptyState").hidden));
+
+  // An author `display` rule can outrank the UA [hidden] style, so check the
+  // computed style of everything that starts hidden.
+  check("elements marked hidden are actually not rendered", () => {
+    for (const id of ["undoBar", "shortcutHelp", "tooltip", "emptyState", "webNote"]) {
+      const node = $(id);
+      if (!node || !node.hidden) continue;
+      eq(win.getComputedStyle(node).display, "none", `#${id} display`);
+    }
+  });
+
+  // ── KPI tiles ──
+  const kpi = (label) => {
+    for (const tile of doc.querySelectorAll(".kpi")) {
+      if (tile.querySelector(".k")?.textContent.trim() === label) return tile.querySelector(".v").textContent.trim();
+    }
+    throw new Error(`no KPI tile labelled "${label}"`);
+  };
+
+  check("Applications tile counts every row", () => eq(kpi("Applications"), "5"));
+  check("This week counts only the last 7 days", () => eq(kpi("This week"), "3")); // 1, 3, 5 days ago
+  check("Interviews tile includes offers", () => eq(kpi("Interviews"), "2")); // Interviewing + Offer
+  check("Ghosted tile counts silence past the threshold", () => eq(kpi("Ghosted"), "1")); // Globex, 40d
+  check("Heard back rate is computed", () => eq(kpi("Heard back"), "60%")); // 3 of 5 past Applied
+  check("Weekly goal tile renders from the default goal", () => eq(kpi("Weekly goal"), "3/10"));
+
+  // ── Weekly chart ──
+  check("weekly chart draws 12 bands", () => eq(doc.querySelectorAll("#weeklyChart .band").length, 12));
+
+  check("weekly chart bars are single-hue", () => {
+    const fills = new Set([...doc.querySelectorAll("#weeklyChart .bar")].map((b) => b.getAttribute("class")));
+    eq(fills.size, 1, "every bar should share one class");
+  });
+
+  check("weekly chart is generated at container pixel width", () => {
+    const svg = doc.querySelector("#weeklyChart svg");
+    const vb = svg.getAttribute("viewBox").split(" ").map(Number);
+    const host = $("weeklyChart").clientWidth;
+    ok(Math.abs(vb[2] - host) <= 2, `viewBox width ${vb[2]} should track container ${host}`);
+  });
+
+  check("weekly chart has an accessible title", () => {
+    ok(/applications per week/i.test(doc.querySelector("#weeklyChart svg title").textContent));
+  });
+
+  check("weekly chart labels exactly one peak", () => {
+    eq(doc.querySelectorAll("#weeklyChart .cap-text").length, 1);
+  });
+
+  // ── Status chart ──
+  check("status chart has one labelled bar per status", () => {
+    eq(doc.querySelectorAll("#statusChart .hbar").length, U.STATUS_OPTIONS.length);
+  });
+
+  check("every status bar carries a value, not just a colour", () => {
+    for (const bar of doc.querySelectorAll("#statusChart .hbar")) {
+      ok(bar.querySelector(".hval").textContent.trim() !== "", "missing value label");
+      ok(bar.querySelector(".hlabel").textContent.trim() !== "", "missing text label");
+    }
+  });
+
+  // ── Sponsorship chart (emphasis form) ──
+  check("sponsorship chart emphasises only the two blocker rows", () => {
+    const emph = doc.querySelectorAll("#sponsorChart .hfill.is-emphasis");
+    eq(emph.length, 2, "No sponsorship + Citizens/PR only");
+  });
+
+  check("non-blocker sponsorship rows are de-emphasised, not a second hue", () => {
+    eq(doc.querySelectorAll("#sponsorChart .hfill.is-deemphasis").length, 2);
+  });
+
+  check("every sponsorship row has a glyph as well as colour", () => {
+    for (const bar of doc.querySelectorAll("#sponsorChart .hbar")) {
+      ok(/[✓✕?]/.test(bar.querySelector(".hlabel").textContent), "no glyph in label");
+    }
+  });
+
+  // ── Needs attention ──
+  check("needs-attention finds the overdue follow-up, stale row and closing deadline", () => {
+    const items = win.GHOSTED ? U.needsAttention(JSON.parse(localStorage.getItem(KEY)), U.DEFAULT_SETTINGS) : [];
+    const kinds = items.map((i) => i.kind).sort();
+    eq(JSON.stringify(kinds), JSON.stringify(["deadline", "followup", "stale"]));
+  });
+
+  check("needs-attention view renders those rows", () => {
+    ok(doc.querySelectorAll("#attentionList .item").length >= 3);
+  });
+
+  check("attention nav pill shows a count", () => {
+    ok(!$("attnCount").hidden && txt("attnCount") !== "");
+  });
+
+  // ── Table: filter, sort, search ──
+  const rowCount = () => doc.querySelectorAll("#jobsRows tr").length;
+  const fire = (el, type) => el.dispatchEvent(new win.Event(type, { bubbles: true }));
+
+  check("sponsorship filter narrows the table", () => {
+    $("fSponsor").value = "Sponsors";
+    fire($("fSponsor"), "change");
+    eq(rowCount(), 2, "Acme + Umbrella");
+  });
+
+  check("clear resets the filters", () => {
+    $("clearFilters").click();
+    eq(rowCount(), 5);
+  });
+
+  check("status filter narrows the table", () => {
+    $("fStatus").value = "Offer";
+    fire($("fStatus"), "change");
+    eq(rowCount(), 1);
+    $("clearFilters").click();
+  });
+
+  check("job type filter narrows the table", () => {
+    $("fType").value = "Internship";
+    fire($("fType"), "change");
+    eq(rowCount(), 2);
+    $("clearFilters").click();
+  });
+
+  check("search matches company", () => {
+    $("search").value = "globex";
+    fire($("search"), "input");
+    eq(rowCount(), 1);
+  });
+
+  check("search is case-insensitive and clears", () => {
+    $("search").value = "INITECH";
+    fire($("search"), "input");
+    eq(rowCount(), 1);
+    $("search").value = "";
+    fire($("search"), "input");
+    eq(rowCount(), 5);
+  });
+
+  check("clicking a header sorts, clicking again reverses", () => {
+    const th = doc.querySelector('#jobsTable th[data-sort="Company"]');
+    th.click();
+    const asc = [...doc.querySelectorAll("#jobsRows tr")].map((r) => r.children[2].textContent);
+    th.click();
+    const desc = [...doc.querySelectorAll("#jobsRows tr")].map((r) => r.children[2].textContent);
+    eq(JSON.stringify(desc), JSON.stringify([...asc].reverse()));
+  });
+
+  check("sponsorship cell shows glyph and label, not colour alone", () => {
+    const cell = doc.querySelector("#jobsRows tr .spons");
+    ok(/[✓✕?]/.test(cell.textContent), "no glyph");
+    ok(cell.textContent.replace(/[✓✕?\s]/g, "").length > 0, "no text label");
+  });
+
+  // ── Writing back ──
+  check("changing a status persists to storage", () => {
+    const sel = [...doc.querySelectorAll("#jobsRows tr")]
+      .find((r) => r.children[2].textContent === "Acme").querySelector("select");
+    sel.value = "Phone screen";
+    fire(sel, "change");
+  });
+
+  await new Promise((r) => setTimeout(r, 150));
+  check("status write landed in localStorage", () => {
+    const saved = JSON.parse(localStorage.getItem(KEY)).find((a) => a.id === "a1");
+    eq(saved.Status, "Phone screen");
+  });
+
+  // ── Delete + undo ──
+  check("delete removes the row and offers undo", () => {
+    const row = [...doc.querySelectorAll("#jobsRows tr")]
+      .find((r) => r.children[2].textContent === "Hooli");
+    row.querySelector(".rowbtn").click();
+  });
+
+  await new Promise((r) => setTimeout(r, 200));
+  check("row is gone from storage after delete", () => {
+    eq(JSON.parse(localStorage.getItem(KEY)).length, 4);
+  });
+
+  check("undo bar is visible after a delete", () => {
+    ok(!$("undoBar").hidden, "attribute should be cleared");
+    ok(win.getComputedStyle($("undoBar")).display !== "none", "should actually render");
+  });
+
+  $("undoBtn").click();
+  await new Promise((r) => setTimeout(r, 250));
+  check("undo restores the row", () => {
+    eq(JSON.parse(localStorage.getItem(KEY)).length, 5);
+    ok(!!JSON.parse(localStorage.getItem(KEY)).find((a) => a.id === "a4"), "a4 should be back");
+  });
+
+  // ── Import ──
+  const importResult = await win.GHOSTED_DATA.importRows(
+    U.rowsFromDelimited(U.toCSV([
+      app({ Company: "Wonka", Position: "Chocolatier", "Job ID": "2001" }),
+      app({ Company: "Acme", Position: "SWE Intern", "Job ID": "1001" }), // already present
+    ])).rows
+  );
+  check("import added 1 and skipped the duplicate job id", () => {
+    eq(importResult.added, 1, "added");
+    eq(importResult.skipped, 1, "skipped");
+  });
+
+  check("imported row is in storage", () => {
+    ok(!!JSON.parse(localStorage.getItem(KEY)).find((a) => a.Company === "Wonka"));
+  });
+
+  // ── Theme ──
+  check("theme toggle stamps the root and persists", () => {
+    const before = frame.contentDocument.documentElement.dataset.theme || "";
+    $("themeBtn").click();
+    const after = frame.contentDocument.documentElement.dataset.theme;
+    ok(after && after !== before, `theme should change, was "${before}" now "${after}"`);
+  });
+
+  await new Promise((r) => setTimeout(r, 150));
+  check("theme choice is stored", () => {
+    ok(["light", "dark"].includes(localStorage.getItem("ghosted.theme")));
+  });
+
+  // ── Routing ──
+  win.location.hash = "#jobs";
+  await new Promise((r) => setTimeout(r, 80));
+  check("hash routing switches views", () => {
+    ok(!$("view-jobs").hidden, "jobs view should be visible");
+    ok($("view-dashboard").hidden, "dashboard should be hidden");
+  });
+
+  win.location.hash = "#nonsense";
+  await new Promise((r) => setTimeout(r, 80));
+  check("unknown hash falls back to the dashboard", () => {
+    ok(!$("view-dashboard").hidden);
+  });
+
+  // ── Empty state ──
+  localStorage.setItem(KEY, "[]");
+  await load("#dashboard");
+  doc = frame.contentDocument;
+  win = frame.contentWindow;
+
+  check("empty state appears with no rows", () => {
+    ok(!doc.getElementById("emptyState").hidden, "empty state should show");
+    ok(doc.getElementById("dashContent").hidden, "content should be hidden");
+  });
+
+  check("nav pills hide when counts are zero", () => {
+    ok(doc.getElementById("jobsCount").hidden);
+    ok(doc.getElementById("attnCount").hidden);
+  });
+
+  localStorage.setItem(KEY, "{not json");
+  await load("#dashboard");
+  check("malformed localStorage is treated as empty, not fatal", () => {
+    ok(!frame.contentDocument.getElementById("emptyState").hidden);
+  });
+
+  // ── Report ──
+  const failed = results.filter((r) => !r.ok);
+  const summary = document.getElementById("summary");
+  summary.className = failed.length ? "fail" : "pass";
+  summary.textContent = `${results.length - failed.length}/${results.length} passed` +
+    (failed.length ? ` — ${failed.length} FAILED` : " — all green");
+
+  localStorage.removeItem(KEY);
+  globalThis.__RESULTS__ = { total: results.length, failed: failed.length, results };
+})();
+</script>
+</body>
+</html>

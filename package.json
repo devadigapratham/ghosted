@@ -6,6 +6,8 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test \"test/*.test.js\"",
+    "serve": "python3 -m http.server 8731",
+    "test:browser": "echo \"npm run serve, then open http://localhost:8731/test/browser.html\"",
     "icons": "node tools/make-icons.js"
   }
 }
