@@ -5,8 +5,8 @@
   <style>
     :root { color-scheme: light dark; }
     body {
-      margin: 0; padding: 12px; width: 268px;
-      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 12px; width: 262px;
+      font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     button {
       display: block; width: 100%; margin-bottom: 8px; padding: 8px 12px;
@@ -17,14 +17,8 @@
     button:hover { filter: brightness(1.1); }
     .queue { font-size: 12px; opacity: .75; margin: 4px 0 10px; }
     .queue.has { color: #b07d00; opacity: 1; }
-
-    .stats {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
-      margin: 2px 0 10px;
-    }
-    .stat {
-      border: 1px solid #8883; border-radius: 6px; padding: 6px 8px;
-    }
+    .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 2px 0 10px; }
+    .stat { border: 1px solid #8883; border-radius: 6px; padding: 6px 8px; }
     .stat .n { font-size: 17px; font-weight: 700; line-height: 1.1; }
     .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .65; }
     .stat.ghost .n { color: #b07d00; }
@@ -40,6 +34,7 @@
 </head>
 <body>
   <button id="logBtn" class="primary">＋ Log this job</button>
+  <button id="appBtn">📊 Open dashboard</button>
 
   <p id="nudge" class="nudge" hidden></p>
 
@@ -51,10 +46,8 @@
   </div>
   <p id="statsNote" class="statsNote" hidden></p>
 
-  <div id="queueInfo" class="queue">0 rows waiting to save</div>
+  <div id="queueInfo" class="queue">All rows saved</div>
   <button id="retryBtn" hidden>↻ Retry queued rows now</button>
-  <button id="sheetBtn">↗ Open my sheet or export</button>
-  <button id="optionsBtn">⚙ Options</button>
   <p class="hint">⌘/Ctrl+Shift+L logs the current job</p>
 
   <script src="popup.js"></script>

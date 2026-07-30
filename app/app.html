@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ghosted</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="../icons/icon32.png" alt="" width="20" height="20">
+      <span>Ghosted</span>
+    </div>
+    <input id="search" type="search" placeholder="Search company, position, notes…" aria-label="Search applications">
+    <div class="topbar-actions">
+      <span id="sourceBadge" class="srcbadge" title="Where this data is read from"></span>
+      <button id="themeBtn" class="ghost" title="Toggle light / dark">◐</button>
+      <button id="refreshBtn" class="ghost" title="Reload data">↻</button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="sidebar">
+      <a href="#dashboard" data-view="dashboard" class="navlink">Dashboard</a>
+      <a href="#pipeline" data-view="pipeline" class="navlink">Pipeline</a>
+      <a href="#jobs" data-view="jobs" class="navlink">All jobs <span id="jobsCount" class="pill"></span></a>
+      <a href="#deadlines" data-view="deadlines" class="navlink">Deadlines <span id="dueCount" class="pill"></span></a>
+      <a href="#settings" data-view="settings" class="navlink">Settings</a>
+      <div class="navfoot">
+        <button id="exportCsvBtn" class="ghost wide">↓ Export CSV</button>
+        <button id="copyTsvBtn" class="ghost wide">⧉ Copy for sheet</button>
+        <p id="exportStatus" class="tiny"></p>
+      </div>
+    </nav>
+
+    <main id="main">
+      <!-- Dashboard -->
+      <section id="view-dashboard" class="view">
+        <div id="emptyState" class="empty" hidden>
+          <h2>Nothing logged yet</h2>
+          <p>Open a job on Handshake and hit <strong>＋ Log this job</strong>, or just apply to
+             something — Ghosted picks it up on its own.</p>
+        </div>
+
+        <div id="dashContent">
+          <div class="kpis" id="kpis"></div>
+
+          <div class="cards">
+            <figure class="card wide">
+              <figcaption>
+                <h3>Applications per week</h3>
+                <p class="sub">Last 12 weeks, by the date you applied.</p>
+              </figcaption>
+              <div id="weeklyChart" class="chartbox"></div>
+            </figure>
+          </div>
+
+          <div class="cards">
+            <figure class="card">
+              <figcaption>
+                <h3>Where they stand</h3>
+                <p class="sub">Every application by its current status.</p>
+              </figcaption>
+              <div id="statusChart" class="hbars"></div>
+            </figure>
+
+            <figure class="card">
+              <figcaption>
+                <h3>Sponsorship of what you applied to</h3>
+                <p class="sub">
+                  Highlighted bars are postings that won't sponsor you. “Unclear” means the
+                  posting didn't say — not a yes.
+                </p>
+              </figcaption>
+              <div id="sponsorChart" class="hbars"></div>
+            </figure>
+          </div>
+
+          <div class="cards">
+            <section class="card">
+              <h3>Due a follow-up</h3>
+              <div id="followUpList" class="list"></div>
+            </section>
+            <section class="card">
+              <h3>Deadlines coming up</h3>
+              <div id="deadlineList" class="list"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pipeline -->
+      <section id="view-pipeline" class="view" hidden>
+        <h2>Pipeline</h2>
+        <p class="sub">Change a status here and it writes straight back to wherever your data lives.</p>
+        <div id="board" class="board"></div>
+      </section>
+
+      <!-- All jobs -->
+      <section id="view-jobs" class="view" hidden>
+        <h2>All jobs</h2>
+        <div class="filters">
+          <label>Status
+            <select id="fStatus"><option value="">Any</option></select>
+          </label>
+          <label>Sponsorship
+            <select id="fSponsor"><option value="">Any</option></select>
+          </label>
+          <label>Job type
+            <select id="fType"><option value="">Any</option></select>
+          </label>
+          <button id="clearFilters" class="ghost">Clear</button>
+          <span id="jobsSummary" class="tiny"></span>
+        </div>
+        <div class="tablewrap">
+          <table id="jobsTable">
+            <thead>
+              <tr>
+                <th data-sort="Date Applied">Applied</th>
+                <th data-sort="Position">Position</th>
+                <th data-sort="Company">Company</th>
+                <th data-sort="Job Type">Type</th>
+                <th data-sort="Sponsorship">Sponsorship</th>
+                <th data-sort="Deadline">Deadline</th>
+                <th data-sort="Status">Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="jobsRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Deadlines -->
+      <section id="view-deadlines" class="view" hidden>
+        <h2>Deadlines</h2>
+        <p class="sub">Only applications that recorded an “apply by” date appear here.</p>
+        <div id="deadlineFull" class="list"></div>
+      </section>
+
+      <!-- Settings -->
+      <section id="view-settings" class="view" hidden>
+        <h2>Settings</h2>
+
+        <section class="card">
+          <h3>Work authorization</h3>
+          <p class="sub">
+            Postings bury their sponsorship policy in boilerplate. Ghosted reads the
+            description and flags it on the job page before you spend twenty minutes
+            on an application.
+          </p>
+          <label class="check"><input id="needsSponsorship" type="checkbox">
+            I need visa sponsorship (turn off to hide the warnings)</label>
+          <label class="check"><input id="showSponsorshipChip" type="checkbox">
+            Show the sponsorship badge on job pages</label>
+          <p class="tiny">
+            Detection is a text match, not legal advice. Always confirm with the recruiter.
+          </p>
+        </section>
+
+        <section class="card">
+          <h3>Capture</h3>
+          <label class="check"><input id="autoCapture" type="checkbox">
+            Auto-detect application submissions</label>
+          <label for="roleOptions">Role dropdown options (comma-separated)</label>
+          <input id="roleOptions" type="text" placeholder="SWE, Data, PM, Research, Other">
+        </section>
+
+        <section class="card">
+          <h3>Follow-ups</h3>
+          <label class="check"><input id="remindersEnabled" type="checkbox">
+            Remind me daily about applications that have gone quiet</label>
+          <label for="followUpDays">Follow up this many days after applying</label>
+          <input id="followUpDays" type="number" min="1" max="120" class="narrow">
+          <label for="ghostAfterDays">Count silence as “ghosted” after this many days</label>
+          <input id="ghostAfterDays" type="number" min="1" max="365" class="narrow">
+        </section>
+
+        <div class="row">
+          <button id="saveBtn" class="primary">Save settings</button>
+          <span id="saveStatus" class="status"></span>
+        </div>
+
+        <section class="card">
+          <h3>Google Sheets sync <span class="badge">optional</span></h3>
+          <p class="sub">
+            Not required — everything works without it. Connecting a sheet mirrors each
+            application into a spreadsheet you can share and edit from your phone. It's
+            free: the Sheets API is unmetered and needs no billing account. Setup is in
+            the README.
+          </p>
+          <label for="sheetUrl">Spreadsheet URL or ID</label>
+          <input id="sheetUrl" type="text" placeholder="https://docs.google.com/spreadsheets/d/…  (blank = stay local)">
+          <label for="sheetName">Tab name</label>
+          <input id="sheetName" type="text" placeholder="Sheet1">
+          <div class="row">
+            <button id="connectBtn" class="primary">Connect Google &amp; verify sheet</button>
+            <button id="openSheetBtn" class="ghost">Open sheet ↗</button>
+            <span id="connectStatus" class="status"></span>
+          </div>
+          <p id="headerWarning" class="warning" hidden></p>
+          <p class="tiny"><span id="queueCount">0</span> row(s) waiting to sync.
+            <button id="retryBtn" class="ghost">Retry now</button>
+            They're already saved locally either way.</p>
+          <p id="queueError" class="warning" hidden></p>
+        </section>
+
+        <section class="card">
+          <h3>Local data</h3>
+          <p class="sub">Every application is stored on this machine, holding the 2000 most recent.</p>
+          <div class="row">
+            <button id="clearBtn" class="danger">Delete all local applications</button>
+            <span id="clearStatus" class="status"></span>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+  <script src="../shared/utils.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

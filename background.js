@@ -209,6 +209,58 @@ async function deleteApplication(id) {
   return { ok: true, remaining: next.length };
 }
 
+// The dashboard reads whichever copy is authoritative. Sheet rows carry their
+// 1-based row number so a status edit can write back to the right cell.
+async function getRows({ interactive = false } = {}) {
+  const settings = await getSettings();
+  const localRows = async () => U.sortApplications(await getLocal("applications", []));
+
+  if (!settings.spreadsheetId) {
+    return { ok: true, source: "local", rows: await localRows() };
+  }
+
+  const url =
+    `${SHEETS_BASE}/${settings.spreadsheetId}/values/` +
+    `${rangeFor(settings.sheetName, `A2:${U.LAST_COLUMN}`)}`;
+  const resp = await sheetsFetch(url, {}, { interactive });
+  if (!resp.ok) {
+    return {
+      ok: true,
+      source: "local",
+      stale: `Sheets API ${resp.status}: ${(await errorDetail(resp)) || resp.statusText}`,
+      rows: await localRows(),
+    };
+  }
+
+  const values = (await resp.json()).values || [];
+  const rows = values
+    .map((v, i) => ({ ...U.valuesToRow(v), _rowNumber: i + 2 }))
+    .filter((r) => r.Company || r.Position);
+  return { ok: true, source: "sheet", rows: U.sortApplications(rows) };
+}
+
+async function writeSheetCell(rowNumber, column, value) {
+  const settings = await getSettings();
+  const index = U.COLUMNS.indexOf(column);
+  if (index < 0) return { ok: false, error: `Unknown column: ${column}` };
+
+  const letter = U.columnLetter(index);
+  const url =
+    `${SHEETS_BASE}/${settings.spreadsheetId}/values/` +
+    `${rangeFor(settings.sheetName, `${letter}${rowNumber}:${letter}${rowNumber}`)}` +
+    `?valueInputOption=USER_ENTERED`;
+
+  const resp = await sheetsFetch(
+    url,
+    { method: "PUT", body: JSON.stringify({ values: [[U.sanitizeCell(value)]] }) },
+    { interactive: true }
+  );
+  if (!resp.ok) {
+    return { ok: false, error: `Sheets API ${resp.status}: ${(await errorDetail(resp)) || resp.statusText}` };
+  }
+  return { ok: true };
+}
+
 async function checkDuplicate(jobId) {
   if (!jobId) return { duplicate: false };
   const logged = await getLocal("loggedJobs", {});
@@ -411,6 +463,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sheetConnected: Boolean(settings.spreadsheetId),
         };
       }
+
+      case "getRows":
+        try {
+          return await getRows({ interactive: false });
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
+
+      case "setStatus":
+        try {
+          if (msg.source === "sheet" && msg.rowNumber) {
+            return await writeSheetCell(msg.rowNumber, "Status", msg.status);
+          }
+          return await updateApplication(msg.id, { Status: msg.status });
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
 
       case "updateApplication":
         return updateApplication(msg.id, msg.changes || {});

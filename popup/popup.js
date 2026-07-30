@@ -74,15 +74,11 @@ $("retryBtn").addEventListener("click", async () => {
   refreshQueue();
 });
 
-$("sheetBtn").addEventListener("click", async () => {
-  const resp = await ask({ type: "openSheet" });
-  if (resp?.ok) window.close();
-  // No sheet connected is the default state, not an error — send them to the
-  // place where the local log and the export buttons live.
-  else chrome.runtime.openOptionsPage();
+// The dashboard is the main surface; the popup is just a launcher for it.
+$("appBtn").addEventListener("click", () => {
+  chrome.runtime.openOptionsPage();
+  window.close();
 });
-
-$("optionsBtn").addEventListener("click", () => chrome.runtime.openOptionsPage());
 
 refreshQueue();
 refreshStats();

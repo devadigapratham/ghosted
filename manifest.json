@@ -53,7 +53,10 @@
       "128": "icons/icon128.png"
     }
   },
-  "options_page": "options/options.html",
+  "options_ui": {
+    "page": "app/app.html",
+    "open_in_tab": true
+  },
   "oauth2": {
     "client_id": "PASTE_YOUR_CLIENT_ID_HERE.apps.googleusercontent.com",
     "scopes": ["https://www.googleapis.com/auth/spreadsheets"]

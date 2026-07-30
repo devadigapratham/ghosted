@@ -15,10 +15,10 @@ available if you want it, and optional.
 1. `chrome://extensions` → turn on **Developer mode** (top right) → **Load
    unpacked** → pick this folder.
 2. Go apply to a job.
+3. Click the ghost in the toolbar → **Open dashboard**.
 
-That's it. Applications are saved on your own machine, and you can export them
-to CSV or paste them straight into any spreadsheet from the options page. No
-Google account, no API keys, nothing to configure.
+That's it. Applications are saved on your own machine. No Google account, no API
+keys, nothing to configure.
 
 Connect a Google Sheet later if you want your applications mirrored somewhere
 you can share and chart them — see [below](#optional-google-sheets-sync). Also
@@ -27,6 +27,25 @@ free.
 Worth thirty seconds in **⚙ Options** either way: if you need visa sponsorship
 leave that toggle on (it drives the pre-apply warnings), set your Role
 dropdown options, and pick how many days of silence counts as ghosted.
+
+## The dashboard
+
+The dashboard is the tool; the browser extension is just the part that captures
+jobs. Open it from the toolbar popup, or right-click the extension icon →
+Options. It runs in its own tab, and it reads whichever copy of your data is
+authoritative — the sheet if you've connected one, otherwise the local log.
+
+- **Dashboard** — headline numbers (applied, this week, interviews, ghosted, and
+  what share ever replied), applications per week, where everything stands, and a
+  breakdown of how many of your applications went to employers who won't sponsor
+  you. Plus what's due a follow-up and which deadlines are closing.
+- **Pipeline** — a column per stage. Change a status and it writes straight back.
+- **All jobs** — searchable, sortable, filterable table of everything, with the
+  job URL on each row so you can reopen a posting that's since been pulled.
+- **Deadlines** — what's closing, overdue first.
+- **Settings** — capture, follow-ups, sponsorship, and the optional sheet.
+
+Light and dark themes, and a toggle if you want to override your OS setting.
 
 ## What it does beyond logging
 
@@ -73,10 +92,10 @@ Every application is written to the extension's own storage first, always. That
 copy is the source of truth: it needs no account, works offline, and means a
 failed sheet sync can never lose a row you already filled in.
 
-The options page has the full list, with an editable Status dropdown, a delete
-button per row, **Download CSV**, and **Copy for spreadsheet** (tab-separated,
-so it pastes cleanly into Sheets, Excel or Numbers). The local log holds the
-2000 most recent applications.
+The dashboard reads and edits that copy directly, and the sidebar has
+**Export CSV** and **Copy for sheet** (tab-separated, so it pastes cleanly into
+Sheets, Excel or Numbers). The local log holds the 2000 most recent
+applications.
 
 ## Optional: Google Sheets sync
 
@@ -147,8 +166,7 @@ placeholder is still live.
 
 ### 4. Point it at your sheet
 
-Click the ghost in the toolbar → **⚙ Options** → the **Google Sheets sync**
-section at the bottom.
+Open the dashboard → **Settings** → the **Google Sheets sync** section.
 
 1. Paste your spreadsheet URL (the ID gets parsed out of it) and the tab name,
    e.g. `Sheet1` or `Applications`.
@@ -238,8 +256,8 @@ shared/utils.js        schema, date parsing, sanitization — used by both sides
 content/urlwatch.js    MAIN-world script, hooks pushState for SPA navigation
 content/selectors.js   every Handshake selector, all in one place
 content/content.js     detection, scraping, the confirmation overlay
-options/               sheet config, Google connect, role options
-popup/                 toolbar popup: manual log, queue status
+app/                   the dashboard: views, charts, settings
+popup/                 toolbar popup: manual log, quick stats, dashboard launcher
 icons/                 generated, don't hand-edit
 tools/make-icons.js    regenerates icons/ (npm run icons)
 test/utils.test.js     unit tests (npm test)
@@ -258,6 +276,28 @@ no browser.
 
 Everything that needs a real browser — scraping, submission detection, OAuth,
 the retry queue — is in [TESTPLAN.md](TESTPLAN.md) as a manual checklist.
+
+## Charts
+
+The three dashboard charts follow a deliberate colour discipline, which is why
+they look plain:
+
+- **Applications per week** is one hue, because a single series comparing
+  magnitude over time has no identity to encode. Only the peak is labelled; the
+  rest is axis ticks and hover.
+- **Where they stand** is also one hue. Colouring nine status bars nine different
+  ways, or shading them darker-where-bigger, would spend the colour channel on
+  information the bar length already carries.
+- **Sponsorship** is the *emphasis* form: the postings that can't hire you are in
+  the critical red, everything else recedes to gray. A green/red pair was the
+  obvious first choice and it was wrong — green vs red measures ΔE 4.1 under
+  deuteranopia, well under the ΔE 8 threshold, so for a red-green colourblind
+  reader the two most important categories would have been the same colour.
+  Every verdict also carries a glyph and a text label, so hue is never the only
+  channel.
+
+The palette is checked with a validator rather than by eye, against both the
+light and dark surfaces.
 
 ## Icons
 
