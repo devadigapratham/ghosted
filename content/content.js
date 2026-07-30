@@ -10,10 +10,13 @@
   chrome.storage.sync.get(U.DEFAULT_SETTINGS, (s) => {
     settings = s;
     updateFloatingButton();
+    scheduleChipUpdate();
   });
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync") return;
     for (const [k, { newValue }] of Object.entries(changes)) settings[k] = newValue;
+    chipCache.clear();
+    scheduleChipUpdate();
   });
 
   // Filled in when the apply modal opens, consumed when submission succeeds.
@@ -24,6 +27,14 @@
   const recentlyLogged = new Map();
 
   const clean = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+  function debounce(fn, ms) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), ms);
+    };
+  }
 
   function getJobId() {
     for (const p of S.jobIdPatterns) {
@@ -39,6 +50,14 @@
       if (m) return m[1];
     }
     return null;
+  }
+
+  function jobUrl(jobId) {
+    // Prefer a canonical /jobs/<id> URL over whatever search params we're on.
+    if (jobId && !new RegExp(`/jobs?/${jobId}\\b`).test(location.pathname)) {
+      return `${location.origin}/jobs/${jobId}`;
+    }
+    return location.origin + location.pathname;
   }
 
   function queryText(selectorList, root = document) {
@@ -101,23 +120,53 @@
     return null;
   }
 
+  // The whole description, for work-auth scanning. Capped because some
+  // postings paste an entire employee handbook in here.
+  function descriptionText() {
+    const jp = jsonLdJobPosting();
+    const fromJsonLd = jp?.description
+      ? clean(String(jp.description).replace(/<[^>]+>/g, " "))
+      : "";
+
+    let best = fromJsonLd;
+    for (const sel of S.css.description) {
+      let el;
+      try {
+        el = document.querySelector(sel);
+      } catch {
+        continue;
+      }
+      const t = clean(el?.textContent);
+      // Longest wins: work-auth boilerplate tends to sit at the very bottom.
+      if (t.length > best.length) best = t;
+      if (best.length > 400 && sel !== "main" && sel !== "article") break;
+    }
+    return best.slice(0, 20_000);
+  }
+
   function scrapeJob() {
-    const data = {
+    const fields = {
       Position: "",
       Company: "",
       Industry: "",
       Location: "",
       "Date Posted": "",
       "Salary Range": "",
+      "Job Type": "",
+      Deadline: "",
     };
 
     // Structured data beats scraping whenever it's there.
     const jp = jsonLdJobPosting();
     if (jp) {
-      data.Position = clean(jp.title);
-      data.Company = clean(jp.hiringOrganization?.name);
-      data.Industry = clean(jp.industry);
-      data["Date Posted"] = U.parsePostedDate(jp.datePosted);
+      fields.Position = clean(jp.title);
+      fields.Company = clean(jp.hiringOrganization?.name);
+      fields.Industry = clean(jp.industry);
+      fields["Date Posted"] = U.parsePostedDate(jp.datePosted);
+      fields["Job Type"] = U.normalizeJobType(
+        [].concat(jp.employmentType || []).join(" ") || jp.title || ""
+      );
+      if (jp.validThrough) fields.Deadline = U.parseDeadline(jp.validThrough);
 
       const locs = []
         .concat(jp.jobLocation || [])
@@ -127,43 +176,99 @@
         })
         .filter(Boolean);
       if (jp.jobLocationType === "TELECOMMUTE") locs.push("Remote");
-      data.Location = locs.join("; ");
+      fields.Location = locs.join("; ");
 
       const sal = jp.baseSalary?.value;
       if (sal) {
         const unit = jp.baseSalary.unitText ? `/${String(jp.baseSalary.unitText).toLowerCase()}` : "";
-        if (sal.minValue && sal.maxValue) data["Salary Range"] = `$${sal.minValue}–$${sal.maxValue}${unit}`;
-        else if (sal.value) data["Salary Range"] = `$${sal.value}${unit}`;
+        if (sal.minValue && sal.maxValue) fields["Salary Range"] = `$${sal.minValue}–$${sal.maxValue}${unit}`;
+        else if (sal.value) fields["Salary Range"] = `$${sal.value}${unit}`;
       }
     }
 
-    if (!data.Position) data.Position = queryText(S.css.title);
-    if (!data.Company) data.Company = queryText(S.css.company);
-    if (!data.Location) data.Location = queryText(S.css.location);
-    if (!data["Salary Range"]) data["Salary Range"] = queryText(S.css.salary);
-    if (!data.Industry) data.Industry = queryText(S.css.industry);
-    if (!data["Date Posted"]) {
+    if (!fields.Position) fields.Position = queryText(S.css.title);
+    if (!fields.Company) fields.Company = queryText(S.css.company);
+    if (!fields.Location) fields.Location = queryText(S.css.location);
+    if (!fields["Salary Range"]) fields["Salary Range"] = queryText(S.css.salary);
+    if (!fields.Industry) fields.Industry = queryText(S.css.industry);
+    if (!fields["Date Posted"]) {
       const el = document.querySelector("time[datetime]");
-      data["Date Posted"] = el
+      fields["Date Posted"] = el
         ? U.parsePostedDate(el.getAttribute("datetime"))
         : U.parsePostedDate(queryText(S.css.posted));
     }
 
-    if (!data.Industry) data.Industry = labeledValue(S.labels.industry);
-    if (!data["Salary Range"]) data["Salary Range"] = labeledValue(S.labels.salary);
-    if (!data.Location) data.Location = labeledValue(S.labels.location);
-    if (!data["Date Posted"]) data["Date Posted"] = U.parsePostedDate(labeledValue(S.labels.posted));
+    if (!fields.Industry) fields.Industry = labeledValue(S.labels.industry);
+    if (!fields["Salary Range"]) fields["Salary Range"] = labeledValue(S.labels.salary);
+    if (!fields.Location) fields.Location = labeledValue(S.labels.location);
+    if (!fields["Date Posted"]) fields["Date Posted"] = U.parsePostedDate(labeledValue(S.labels.posted));
 
-    if (!data["Date Posted"]) data["Date Posted"] = U.parsePostedDate(textMatch(S.postedTextPattern));
-    if (!data["Salary Range"]) data["Salary Range"] = textMatch(S.salaryTextPattern);
+    if (!fields["Date Posted"]) fields["Date Posted"] = U.parsePostedDate(textMatch(S.postedTextPattern));
+    if (!fields["Salary Range"]) fields["Salary Range"] = textMatch(S.salaryTextPattern);
+
+    if (!fields.Deadline) fields.Deadline = U.parseDeadline(queryText(S.css.deadline));
+    if (!fields.Deadline) fields.Deadline = U.parseDeadline(labeledValue(S.labels.deadline));
+    if (!fields.Deadline) fields.Deadline = U.parseDeadline(textMatch(S.deadlineTextPattern));
+
+    if (!fields["Job Type"]) fields["Job Type"] = U.normalizeJobType(queryText(S.css.jobType));
+    if (!fields["Job Type"]) fields["Job Type"] = U.normalizeJobType(labeledValue(S.labels.jobType));
+    if (!fields["Job Type"]) fields["Job Type"] = U.normalizeJobType(fields.Position);
 
     // Handshake separates multiple locations with bullets; the sheet uses "; ".
-    data.Location = data.Location.replace(/\s*[•|·]\s*/g, "; ");
+    fields.Location = fields.Location.replace(/\s*[•|·]\s*/g, "; ");
 
-    return data;
+    const description = descriptionText();
+    const workAuth = U.classifyWorkAuth(description);
+    fields.Sponsorship = workAuth.status || "Unclear";
+
+    return { fields, workAuth };
   }
 
-  // Does the modal show an actually-attached résumé, or just the word?
+  // ── Sponsorship chip ──
+  // Shown before you apply, which is the only time the answer is useful.
+  const chipCache = new Map();
+  let chip = null;
+
+  function chipStyleFor(status) {
+    if (status === "Sponsors") return { cls: "chip good", text: "✓ Sponsors visas" };
+    if (status === "No sponsorship") return { cls: "chip bad", text: "⚠ No sponsorship" };
+    if (status === "Citizens/PR only") return { cls: "chip bad", text: "⚠ Citizens/PR only" };
+    return { cls: "chip meh", text: "? Sponsorship unclear" };
+  }
+
+  function updateChip() {
+    if (!chip) return;
+    const jobId = getJobId();
+
+    if (!jobId || !settings.showSponsorshipChip || !settings.needsSponsorship) {
+      chip.style.display = "none";
+      return;
+    }
+
+    let result = chipCache.get(jobId);
+    if (!result) {
+      const description = descriptionText();
+      // The description loads after the title on some pages; wait for it
+      // rather than caching a confident-looking "unclear".
+      if (description.length < 200) {
+        chip.style.display = "none";
+        return;
+      }
+      result = U.classifyWorkAuth(description);
+      chipCache.set(jobId, result);
+    }
+
+    const { cls, text } = chipStyleFor(result.status);
+    chip.className = cls;
+    chip.textContent = text;
+    chip.title = result.evidence
+      ? `${result.evidence}\n\n(click to dismiss)`
+      : "No sponsorship language found in this posting — check with the recruiter.";
+    chip.style.display = "block";
+  }
+
+  const scheduleChipUpdate = debounce(updateChip, 700);
+
   function detectResumeUpload(dialog) {
     for (const sel of S.resumeUpload.controls) {
       let inputs;
@@ -195,9 +300,11 @@
   }
 
   function onApplyModalOpen(dialog) {
+    const scraped = scrapeJob();
     pendingApp = {
       jobId: getJobId(),
-      data: scrapeJob(),
+      fields: scraped.fields,
+      workAuth: scraped.workAuth,
       coverLetter: "",
       resumeUpload: "",
       dialog,
@@ -267,6 +374,7 @@
       }
       if (pendingApp?.dialog?.isConnected) scanApplyModal(pendingApp.dialog);
     }
+    scheduleChipUpdate();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
 
@@ -286,8 +394,11 @@
       if (jobId && Date.now() - (recentlyLogged.get(jobId) || 0) < 60_000) return;
       if (jobId) recentlyLogged.set(jobId, Date.now());
 
-      const data = scrapeJob();
-      setTimeout(() => triggerLog({ auto: true, external: true, presetData: { jobId, data } }), 600);
+      const scraped = scrapeJob();
+      setTimeout(
+        () => triggerLog({ auto: true, external: true, presetData: { jobId, ...scraped } }),
+        600
+      );
     },
     true
   );
@@ -296,6 +407,7 @@
     lastUrl = location.href;
     pendingApp = null;
     updateFloatingButton();
+    scheduleChipUpdate();
   }
   window.addEventListener("ghosted:urlchange", onUrlChange);
   window.addEventListener("popstate", onUrlChange);
@@ -326,21 +438,34 @@
     }
     .fab:hover { background: #16693f; }
 
+    .chip {
+      position: fixed; bottom: 66px; right: 24px; z-index: 2147483645;
+      padding: 6px 12px; border-radius: 999px; cursor: help;
+      font-size: 12px; font-weight: 600; display: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 240px;
+    }
+    .chip.good { background: #d6f2e2; color: #0f5132; border: 1px solid #a6ddc0; }
+    .chip.bad  { background: #f8d7da; color: #842029; border: 1px solid #f1aeb5; }
+    .chip.meh  { background: #e9ecef; color: #41464b; border: 1px solid #ced4da; }
+
     .backdrop {
       position: fixed; inset: 0; z-index: 2147483646;
       background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center;
     }
     .panel {
-      width: min(560px, 94vw); max-height: 90vh; overflow-y: auto;
+      width: min(620px, 94vw); max-height: 90vh; overflow-y: auto;
       background: #fff; color: #1a1a2e; border-radius: 10px; padding: 18px 20px;
       box-shadow: 0 8px 40px rgba(0,0,0,.4);
     }
     .panel h2 { margin: 0 0 4px; font-size: 16px; }
     .panel .sub { margin: 0 0 12px; font-size: 12px; color: #666; }
-    .warn-banner {
+    .banner {
+      border-radius: 6px; padding: 8px 10px; font-size: 12px; margin-bottom: 10px;
       background: #fff3cd; color: #664d03; border: 1px solid #ffe69c;
-      border-radius: 6px; padding: 8px 10px; font-size: 12px; margin-bottom: 12px;
     }
+    .banner.stop { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
+    .banner.info { background: #e7f1ff; color: #084298; border-color: #b6d4fe; }
+    .banner .quote { display: block; margin-top: 4px; font-style: italic; opacity: .85; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
     .field { display: flex; flex-direction: column; gap: 3px; }
     .field.wide { grid-column: 1 / -1; }
@@ -374,9 +499,14 @@
       .field label { color: #b8b8c8; }
       .field input, .field select, .field textarea { background: #2a2a38; border-color: #44445a; color: #e8e8ef; }
       .field.missing input, .field.missing select { background: #3a331a; border-color: #a8861f; }
-      .warn-banner { background: #3a331a; color: #ffd75e; border-color: #6b5a1a; }
+      .banner { background: #3a331a; color: #ffd75e; border-color: #6b5a1a; }
+      .banner.stop { background: #3d1f22; color: #ff9aa2; border-color: #6b2a30; }
+      .banner.info { background: #17233a; color: #9ec5fe; border-color: #2c4470; }
       .btn { background: #2a2a38; border-color: #44445a; color: #e8e8ef; }
       .btn.primary { background: #1b7f4d; border-color: #1b7f4d; }
+      .chip.good { background: #14372a; color: #75d6a4; border-color: #256b4a; }
+      .chip.bad { background: #3d1f22; color: #ff9aa2; border-color: #6b2a30; }
+      .chip.meh { background: #2a2a38; color: #b8b8c8; border-color: #44445a; }
     }
   `;
   shadow.appendChild(style);
@@ -387,6 +517,13 @@
   fab.addEventListener("click", () => triggerLog({ auto: false }));
   shadow.appendChild(fab);
 
+  chip = document.createElement("div");
+  chip.className = "chip meh";
+  chip.addEventListener("click", () => {
+    chip.style.display = "none";
+  });
+  shadow.appendChild(chip);
+
   function mountHost() {
     if (!host.isConnected && document.body) document.body.appendChild(host);
   }
@@ -396,6 +533,7 @@
     fab.style.display = getJobId() ? "block" : "none";
   }
   updateFloatingButton();
+  scheduleChipUpdate();
 
   function toast(message, kind = "ok", ms = 4000) {
     const el = document.createElement("div");
@@ -414,17 +552,23 @@
     if (overlayEl) return;
 
     const jobId = presetData?.jobId ?? pendingApp?.jobId ?? getJobId();
-    const scraped = presetData?.data ?? pendingApp?.data ?? scrapeJob();
+    const fresh = presetData || pendingApp || scrapeJob();
+    const scraped = fresh.fields;
+    const workAuth = fresh.workAuth || { status: "", evidence: "" };
     const coverLetter = pendingApp?.coverLetter ?? "";
     const resumeUpload = pendingApp?.resumeUpload ?? "";
     pendingApp = null;
 
-    let duplicate = null;
-    if (jobId) {
+    let context = null;
+    if (jobId || scraped.Company) {
       try {
-        duplicate = await chrome.runtime.sendMessage({ type: "checkDuplicate", jobId });
+        context = await chrome.runtime.sendMessage({
+          type: "jobContext",
+          jobId,
+          company: scraped.Company,
+        });
       } catch {
-        // Worker asleep or reloading — carry on without the dupe warning.
+        // Worker asleep or reloading — carry on without dupe/company info.
       }
     }
 
@@ -440,12 +584,23 @@
       Notes: external ? "External application" : "",
       Status: "Applied",
       "Latest word": `Application submitted ${today}`,
+      "Follow-up On": U.addDays(today, settings.followUpDays || U.DEFAULT_SETTINGS.followUpDays),
+      "Job URL": jobUrl(jobId),
+      "Job ID": jobId || "",
     };
 
-    openOverlay({ row, jobId, duplicate: duplicate?.duplicate ? duplicate : null, external, auto });
+    openOverlay({
+      row,
+      jobId,
+      workAuth,
+      duplicate: context?.duplicate ? context : null,
+      companyCount: context?.companyCount || 0,
+      external,
+      auto,
+    });
   }
 
-  function openOverlay({ row, jobId, duplicate, external }) {
+  function openOverlay({ row, jobId, workAuth, duplicate, companyCount, external }) {
     const backdrop = document.createElement("div");
     backdrop.className = "backdrop";
     overlayEl = backdrop;
@@ -462,11 +617,41 @@
     sub.textContent = jobId ? `Handshake job #${jobId}` : "No job ID detected for this page";
     panel.append(title, sub);
 
+    const banner = (text, kind, quote) => {
+      const el = document.createElement("div");
+      el.className = "banner" + (kind ? ` ${kind}` : "");
+      el.textContent = text;
+      if (quote) {
+        const q = document.createElement("span");
+        q.className = "quote";
+        q.textContent = `“${quote}”`;
+        el.appendChild(q);
+      }
+      panel.appendChild(el);
+    };
+
     if (duplicate) {
-      const warn = document.createElement("div");
-      warn.className = "warn-banner";
-      warn.textContent = `⚠ You already logged this job on ${duplicate.date}. Saving will append a duplicate row.`;
-      panel.appendChild(warn);
+      banner(`⚠ You already logged this job on ${duplicate.date}. Saving will append a duplicate row.`);
+    }
+
+    // The reason this extension exists, for anyone who needs a visa.
+    if (settings.needsSponsorship && U.isSponsorshipBlocker(workAuth.status)) {
+      banner(
+        workAuth.status === "Citizens/PR only"
+          ? "⚠ This posting looks restricted to US citizens or permanent residents."
+          : "⚠ This posting says it does not offer visa sponsorship.",
+        "stop",
+        workAuth.evidence
+      );
+    } else if (settings.needsSponsorship && workAuth.status === "Sponsors") {
+      banner("✓ This posting mentions visa sponsorship.", "info", workAuth.evidence);
+    }
+
+    if (companyCount > 0) {
+      banner(
+        `This is application #${companyCount + 1} to ${row.Company || "this company"}.`,
+        "info"
+      );
     }
 
     const yesNo = ["", "Yes", "No"];
@@ -475,18 +660,28 @@
       { key: "Company", type: "text" },
       { key: "Industry", type: "text" },
       { key: "Role", type: "select", options: ["", ...settings.roleOptions] },
+      { key: "Job Type", type: "select", options: ["", "Internship", "Co-op", "New grad", "Full-time", "Part-time", "Contract", "Fellowship"] },
       { key: "Location", type: "text" },
+      {
+        key: "Sponsorship",
+        type: "select",
+        options: ["", "Sponsors", "No sponsorship", "Citizens/PR only", "Unclear"],
+      },
       { key: "Date Posted", type: "text", placeholder: "YYYY-MM-DD" },
+      { key: "Deadline", type: "text", placeholder: "YYYY-MM-DD" },
       { key: "Date Applied", type: "text" },
+      { key: "Follow-up On", type: "text", placeholder: "YYYY-MM-DD" },
       { key: "Connections?", type: "text", datalist: ["Yes", "No"] },
       { key: "Cover Letter", type: "select", options: yesNo },
       { key: "Résumé upload?", type: "select", options: yesNo },
       { key: "Résumé Form?", type: "select", options: yesNo },
       { key: "Salary Range", type: "text" },
+      { key: "Status", type: "select", options: U.STATUS_OPTIONS },
       { key: "Notes", type: "textarea", wide: true },
-      { key: "Status", type: "text" },
-      { key: "Latest word", type: "text" },
+      { key: "Latest word", type: "text", wide: true },
     ];
+    // Carried through but not worth a form field.
+    const hiddenKeys = ["Job URL", "Job ID"];
 
     const grid = document.createElement("div");
     grid.className = "grid";
@@ -573,12 +768,14 @@
 
       const finalRow = {};
       for (const f of fields) finalRow[f.key] = inputs[f.key].value;
+      for (const k of hiddenKeys) finalRow[k] = row[k];
 
       try {
         const resp = await chrome.runtime.sendMessage({
           type: "logJob",
           row: finalRow,
           jobId,
+          company: finalRow.Company,
           force: true, // the overlay already showed the dupe warning
         });
         close();

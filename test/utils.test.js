@@ -10,11 +10,10 @@ const U = globalThis.GHOSTED;
 // Fixed clock, built from local parts because toISODate reads local getters.
 const NOW = new Date(2026, 6, 30); // 2026-07-30
 
-test("COLUMNS is the 15-column A..O schema", () => {
-  assert.strictEqual(U.COLUMNS.length, 15);
+test("COLUMNS starts at Position and stays unique", () => {
   assert.strictEqual(U.COLUMNS[0], "Position");
   assert.strictEqual(U.COLUMNS[14], "Latest word");
-  assert.strictEqual(new Set(U.COLUMNS).size, 15, "column names must be unique");
+  assert.strictEqual(new Set(U.COLUMNS).size, U.COLUMNS.length, "column names must be unique");
 });
 
 test.describe("parsePostedDate — relative", () => {
@@ -208,17 +207,17 @@ test.describe("rowToValues", () => {
     assert.deepStrictEqual(U.rowToValues(row), U.COLUMNS.map((_, i) => `v${i}`));
   });
 
-  test('always emits 15 cells, absent keys as ""', () => {
+  test('emits the full width, absent keys as ""', () => {
     const values = U.rowToValues({ Position: "SWE Intern", Company: "Acme" });
-    assert.strictEqual(values.length, 15);
+    assert.strictEqual(values.length, U.COLUMNS.length);
     assert.strictEqual(values[0], "SWE Intern");
     assert.strictEqual(values[1], "Acme");
-    assert.deepStrictEqual(values.slice(2), Array(13).fill(""));
+    assert.deepStrictEqual(values.slice(2), Array(U.COLUMNS.length - 2).fill(""));
   });
 
   test("drops keys that aren't in the schema", () => {
     const values = U.rowToValues({ Position: "SWE", jobId: "12345", junk: "x" });
-    assert.strictEqual(values.length, 15);
+    assert.strictEqual(values.length, U.COLUMNS.length);
     assert.ok(!values.includes("12345"));
   });
 
@@ -319,4 +318,387 @@ test("DEFAULT_SETTINGS has the keys the options page reads", () => {
     assert.ok(key in U.DEFAULT_SETTINGS, `missing default: ${key}`);
   }
   assert.ok(Array.isArray(U.DEFAULT_SETTINGS.roleOptions));
+});
+
+test.describe("parseDeadline", () => {
+  test.describe("recognizes the usual phrasings", () => {
+    const cases = [
+      ["Apply by Aug 15", "2026-08-15"],
+      ["Deadline: 2026-09-01", "2026-09-01"],
+      ["Applications close September 1, 2026", "2026-09-01"],
+      ["apply by tomorrow", "2026-07-31"],
+      ["in 2 weeks", "2026-08-13"],
+      ["Aug 15", "2026-08-15"],
+      ["August 15th", "2026-08-15"],
+    ];
+    for (const [input, expected] of cases) {
+      test(`${JSON.stringify(input)} -> ${expected}`, () => {
+        assert.strictEqual(U.parseDeadline(input, NOW), expected);
+      });
+    }
+  });
+
+  test("a bare month+day already past rolls forward a year", () => {
+    // Deadlines point forward, the opposite of posted dates.
+    assert.strictEqual(U.parseDeadline("January 10", NOW), "2027-01-10");
+    assert.strictEqual(U.parsePostedDate("January 10", NOW), "2026-01-10");
+  });
+
+  test("allows a recently closed deadline", () => {
+    assert.strictEqual(U.parseDeadline("2026-07-10", NOW), "2026-07-10");
+  });
+
+  test("rejects something years out", () => {
+    assert.strictEqual(U.parseDeadline("March 3, 2031", NOW), "");
+  });
+
+  test('returns "" for junk and blanks', () => {
+    assert.strictEqual(U.parseDeadline("rolling basis", NOW), "");
+    assert.strictEqual(U.parseDeadline("", NOW), "");
+    assert.strictEqual(U.parseDeadline(null, NOW), "");
+  });
+});
+
+test.describe("classifyWorkAuth", () => {
+  const status = (text) => U.classifyWorkAuth(text).status;
+
+  test.describe("flags postings that won't sponsor", () => {
+    const cases = [
+      "Applicants must be authorized to work in the U.S. without the need for visa sponsorship.",
+      "We do not sponsor employment visas at this time.",
+      "This role is not eligible for visa sponsorship.",
+      "Visa sponsorship is not offered for this position.",
+      "We are unable to offer visa sponsorship.",
+      "Employer will not sponsor applicants for work visas.",
+      "Candidates must not require sponsorship now or in the future.",
+      "No visa sponsorship is available.",
+    ];
+    for (const text of cases) {
+      test(text.slice(0, 52), () => assert.strictEqual(status(text), "No sponsorship"));
+    }
+  });
+
+  test.describe("flags citizenship and clearance requirements", () => {
+    const cases = [
+      "Must be a US citizen.",
+      "U.S. citizenship is required for this role.",
+      "This position requires an active security clearance.",
+      "Must be a US person as defined under ITAR.",
+      "Open to US citizens or permanent residents only.",
+      "Candidates must be able to obtain a security clearance.",
+    ];
+    for (const text of cases) {
+      test(text.slice(0, 52), () => assert.strictEqual(status(text), "Citizens/PR only"));
+    }
+  });
+
+  test.describe("recognizes employers that do sponsor", () => {
+    const cases = [
+      "We are happy to sponsor H-1B visas for exceptional candidates.",
+      "Visa sponsorship is available for this role.",
+      "F-1 students on OPT or CPT are welcome to apply.",
+      "We sponsor for H-1B and green card.",
+      "We encourage international students to apply.",
+    ];
+    for (const text of cases) {
+      test(text.slice(0, 52), () => assert.strictEqual(status(text), "Sponsors"));
+    }
+  });
+
+  test("a restriction beats a sponsorship blurb elsewhere in the posting", () => {
+    const text =
+      "We will sponsor H-1B for the right person. This program is subject to ITAR and requires US person status.";
+    assert.strictEqual(status(text), "Citizens/PR only");
+  });
+
+  test('"not able to" is caught, not just "unable to"', () => {
+    assert.strictEqual(status("We are not able to provide visa sponsorship."), "No sponsorship");
+    assert.strictEqual(status("We are not able to sponsor visas."), "No sponsorship");
+  });
+
+  test("a sponsored lunch is not visa sponsorship", () => {
+    assert.strictEqual(status("We do sponsor team lunches every Friday."), "");
+  });
+
+  test("no-sponsorship beats a stray positive mention", () => {
+    const text = "Sponsorship: we are not able to provide visa sponsorship. We do sponsor team lunches.";
+    assert.strictEqual(status(text), "No sponsorship");
+  });
+
+  test('says nothing rather than guessing when the posting is silent', () => {
+    assert.strictEqual(status("Acme is an equal opportunity employer. Free snacks."), "");
+    assert.strictEqual(status(""), "");
+    assert.strictEqual(status(null), "");
+  });
+
+  test("doesn't trip on the bare word 'person'", () => {
+    assert.strictEqual(status("You must be a detail-oriented person who loves data."), "");
+  });
+
+  test("doesn't treat a generic 'no experience required' as a restriction", () => {
+    assert.strictEqual(status("No experience required. Training provided."), "");
+  });
+
+  test("returns the sentence it matched as evidence", () => {
+    const r = U.classifyWorkAuth("Great team. We do not sponsor employment visas. Apply today.");
+    assert.strictEqual(r.status, "No sponsorship");
+    assert.match(r.evidence, /do not sponsor/i);
+    assert.ok(!/Great team/.test(r.evidence), "evidence should be the matching sentence only");
+  });
+
+  test("caps evidence length", () => {
+    const r = U.classifyWorkAuth("x ".repeat(400) + "we do not sponsor visas");
+    assert.ok(r.evidence.length <= 200, `evidence was ${r.evidence.length} chars`);
+  });
+});
+
+test.describe("isSponsorshipBlocker", () => {
+  test("blocks on no-sponsorship and citizens-only", () => {
+    assert.ok(U.isSponsorshipBlocker("No sponsorship"));
+    assert.ok(U.isSponsorshipBlocker("Citizens/PR only"));
+  });
+
+  test("does not block on sponsors, unclear or empty", () => {
+    assert.ok(!U.isSponsorshipBlocker("Sponsors"));
+    assert.ok(!U.isSponsorshipBlocker("Unclear"));
+    assert.ok(!U.isSponsorshipBlocker(""));
+  });
+});
+
+test.describe("normalizeJobType", () => {
+  const cases = [
+    ["Internship", "Internship"],
+    ["Summer 2027 Software Engineering Intern", "Internship"],
+    ["Co-op", "Co-op"],
+    ["Coop Engineering", "Co-op"],
+    ["Full-time", "Full-time"],
+    ["FULL TIME", "Full-time"],
+    ["New Grad Software Engineer", "New grad"],
+    ["Part-time barista", "Part-time"],
+    ["Contract role", "Contract"],
+    ["Research Fellowship", "Fellowship"],
+    ["Senior Engineer", ""],
+    ["", ""],
+    [null, ""],
+  ];
+  for (const [input, expected] of cases) {
+    test(`${JSON.stringify(input)} -> ${JSON.stringify(expected)}`, () => {
+      assert.strictEqual(U.normalizeJobType(input), expected);
+    });
+  }
+
+  test("co-op wins over intern when both appear", () => {
+    assert.strictEqual(U.normalizeJobType("Engineering Co-op / Internship"), "Co-op");
+  });
+});
+
+test.describe("schema growth", () => {
+  test("CORE_COLUMNS is still the original A..O prefix", () => {
+    assert.strictEqual(U.CORE_COLUMNS.length, 15);
+    assert.deepStrictEqual(U.COLUMNS.slice(0, 15), U.CORE_COLUMNS);
+  });
+
+  test("new columns are appended, never inserted", () => {
+    assert.deepStrictEqual(U.COLUMNS.slice(15), U.EXTRA_COLUMNS);
+    assert.strictEqual(U.CORE_COLUMNS[14], "Latest word");
+  });
+
+  test("column names stay unique", () => {
+    assert.strictEqual(new Set(U.COLUMNS).size, U.COLUMNS.length);
+  });
+
+  test("LAST_COLUMN matches the schema width", () => {
+    assert.strictEqual(U.LAST_COLUMN, U.columnLetter(U.COLUMNS.length - 1));
+    assert.strictEqual(U.LAST_COLUMN, "U");
+  });
+
+  test("columnLetter handles the A..Z boundary", () => {
+    assert.strictEqual(U.columnLetter(0), "A");
+    assert.strictEqual(U.columnLetter(25), "Z");
+    assert.strictEqual(U.columnLetter(26), "AA");
+    assert.strictEqual(U.columnLetter(27), "AB");
+  });
+
+  test("rowToValues covers the full width", () => {
+    assert.strictEqual(U.rowToValues({}).length, U.COLUMNS.length);
+  });
+});
+
+test.describe("valuesToRow", () => {
+  test("round-trips through rowToValues", () => {
+    const row = {};
+    U.COLUMNS.forEach((col, i) => { row[col] = `v${i}`; });
+    assert.deepStrictEqual(U.valuesToRow(U.rowToValues(row)), row);
+  });
+
+  test("pads a short row from the sheet", () => {
+    // Sheets omits trailing empty cells, so rows come back short.
+    const row = U.valuesToRow(["SWE", "Acme"]);
+    assert.strictEqual(row.Position, "SWE");
+    assert.strictEqual(row.Company, "Acme");
+    assert.strictEqual(row["Job ID"], "");
+    assert.strictEqual(Object.keys(row).length, U.COLUMNS.length);
+  });
+
+  test("survives undefined", () => {
+    assert.strictEqual(U.valuesToRow(undefined).Position, "");
+  });
+});
+
+test.describe("addDays", () => {
+  test("moves forward", () => {
+    assert.strictEqual(U.addDays("2026-07-30", 14), "2026-08-13");
+  });
+
+  test("moves backward", () => {
+    assert.strictEqual(U.addDays("2026-07-30", -1), "2026-07-29");
+  });
+
+  test("crosses a year boundary", () => {
+    assert.strictEqual(U.addDays("2026-12-31", 1), "2027-01-01");
+  });
+
+  test("handles a leap day", () => {
+    assert.strictEqual(U.addDays("2028-02-28", 1), "2028-02-29");
+  });
+
+  test('returns "" on junk', () => {
+    assert.strictEqual(U.addDays("nope", 5), "");
+  });
+});
+
+test.describe("summarize", () => {
+  const TODAY = "2026-07-30";
+  const settings = { ...U.DEFAULT_SETTINGS, ghostAfterDays: 21 };
+  const row = (over) => ({ Company: "Acme", Position: "SWE", Status: "Applied", ...over });
+
+  test("counts totals and this week", () => {
+    const stats = U.summarize(
+      [
+        row({ "Date Applied": "2026-07-29" }),
+        row({ "Date Applied": "2026-07-25" }),
+        row({ "Date Applied": "2026-06-01" }),
+      ],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.total, 3);
+    assert.strictEqual(stats.thisWeek, 2);
+  });
+
+  test("skips blank spacer rows", () => {
+    const stats = U.summarize([row({}), { Status: "Applied" }, {}], settings, TODAY);
+    assert.strictEqual(stats.total, 1);
+  });
+
+  test("counts silence past the threshold as ghosted", () => {
+    const stats = U.summarize(
+      [
+        row({ "Date Applied": "2026-06-01" }), // 59 days, silent
+        row({ "Date Applied": "2026-07-29" }), // 1 day, too soon
+      ],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.ghosted, 1);
+  });
+
+  test("an old application that got a reply is not ghosted", () => {
+    const stats = U.summarize(
+      [row({ "Date Applied": "2026-06-01", Status: "Interviewing" })],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.ghosted, 0);
+    assert.strictEqual(stats.interviews, 1);
+  });
+
+  test("respects an explicit Ghosted status regardless of age", () => {
+    const stats = U.summarize([row({ "Date Applied": TODAY, Status: "Ghosted" })], settings, TODAY);
+    assert.strictEqual(stats.ghosted, 1);
+    assert.strictEqual(stats.open, 0);
+  });
+
+  test("counts offers, rejections and open applications", () => {
+    const stats = U.summarize(
+      [
+        row({ Status: "Offer" }),
+        row({ Status: "Rejected" }),
+        row({ Status: "Applied" }),
+        row({ Status: "Final round" }),
+      ],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.offers, 1);
+    assert.strictEqual(stats.rejected, 1);
+    assert.strictEqual(stats.open, 2);
+    assert.strictEqual(stats.interviews, 1);
+  });
+
+  test("response rate counts anything past Applied", () => {
+    const stats = U.summarize(
+      [row({ Status: "Applied" }), row({ Status: "Rejected" }), row({ Status: "Offer" }), row({ Status: "Applied" })],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.responseRate, 50);
+  });
+
+  test("response rate is 0, not NaN, for an empty sheet", () => {
+    const stats = U.summarize([], settings, TODAY);
+    assert.strictEqual(stats.responseRate, 0);
+    assert.strictEqual(stats.total, 0);
+  });
+
+  test("counts follow-ups that are due, but not future ones", () => {
+    const stats = U.summarize(
+      [
+        row({ "Follow-up On": "2026-07-29" }), // due
+        row({ "Follow-up On": TODAY }), // due today
+        row({ "Follow-up On": "2026-08-20" }), // not yet
+      ],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.needsFollowUp, 2);
+  });
+
+  test("does not chase a follow-up on a closed application", () => {
+    const stats = U.summarize(
+      [row({ "Follow-up On": "2026-07-01", Status: "Rejected" })],
+      settings,
+      TODAY
+    );
+    assert.strictEqual(stats.needsFollowUp, 0);
+  });
+
+  test("treats a blank status as still open", () => {
+    const stats = U.summarize([row({ Status: "", "Date Applied": "2026-06-01" })], settings, TODAY);
+    assert.strictEqual(stats.open, 1);
+    assert.strictEqual(stats.ghosted, 1);
+  });
+
+  test("honors a custom ghost threshold", () => {
+    const rows = [row({ "Date Applied": "2026-07-20" })]; // 10 days
+    assert.strictEqual(U.summarize(rows, { ...settings, ghostAfterDays: 7 }, TODAY).ghosted, 1);
+    assert.strictEqual(U.summarize(rows, { ...settings, ghostAfterDays: 30 }, TODAY).ghosted, 0);
+  });
+});
+
+test.describe("sheetUrl", () => {
+  test("builds an edit URL", () => {
+    assert.strictEqual(U.sheetUrl("abc123"), "https://docs.google.com/spreadsheets/d/abc123/edit");
+  });
+
+  test('returns "" with no ID', () => {
+    assert.strictEqual(U.sheetUrl(""), "");
+    assert.strictEqual(U.sheetUrl(undefined), "");
+  });
+});
+
+test("DEFAULT_SETTINGS covers every new option the pages read", () => {
+  for (const key of ["followUpDays", "remindersEnabled", "ghostAfterDays", "needsSponsorship", "showSponsorshipChip"]) {
+    assert.ok(key in U.DEFAULT_SETTINGS, `missing default: ${key}`);
+  }
 });

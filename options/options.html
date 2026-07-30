@@ -24,13 +24,47 @@
     </section>
 
     <section>
+      <h2>Work authorization</h2>
+      <p class="note">
+        Postings bury their sponsorship policy in the boilerplate. Ghosted reads
+        the description and flags it on the job page <em>before</em> you spend
+        twenty minutes on an application, and records it in the Sponsorship
+        column.
+      </p>
+      <label class="check">
+        <input id="needsSponsorship" type="checkbox">
+        I need visa sponsorship (turn this off and the warnings go away)
+      </label>
+      <label class="check">
+        <input id="showSponsorshipChip" type="checkbox">
+        Show the sponsorship badge on job pages
+      </label>
+      <p class="note subtle">
+        Detection is a text match, not legal advice. “Unclear” means the posting
+        didn't say — it's not a yes. Always confirm with the recruiter.
+      </p>
+    </section>
+
+    <section>
       <h2>Capture behavior</h2>
       <label class="check">
-        <input id="autoCapture" type="checkbox" checked>
+        <input id="autoCapture" type="checkbox">
         Auto-detect application submissions (uncheck to only log via the “Log this job” button)
       </label>
       <label for="roleOptions">Role dropdown options (comma-separated)</label>
       <input id="roleOptions" type="text" placeholder="SWE, Data, PM, Research, Other">
+    </section>
+
+    <section>
+      <h2>Follow-ups</h2>
+      <label class="check">
+        <input id="remindersEnabled" type="checkbox">
+        Remind me daily about applications that have gone quiet
+      </label>
+      <label for="followUpDays">Follow up this many days after applying</label>
+      <input id="followUpDays" type="number" min="1" max="120" class="narrow">
+      <label for="ghostAfterDays">Count silence as “ghosted” after this many days</label>
+      <input id="ghostAfterDays" type="number" min="1" max="365" class="narrow">
     </section>
 
     <section>

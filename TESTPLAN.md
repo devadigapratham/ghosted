@@ -9,8 +9,10 @@ Before starting: extension loaded, OAuth client configured, options page shows
 Worker logs are at `chrome://extensions` → the card → **service worker**.
 Content script logs show up in the normal page DevTools console.
 
-Suggested order — cheapest and most reversible first: 4, 9, 11, 5, 6, then 1
-and 3 (which need real applications), and 7 last since it revokes access.
+Suggested order — cheapest and most reversible first: 4 (manual triggers), 6
+(sponsorship), 16 (sheet verification), 18 (formula injection), 12 (offline
+queue), 13 (duplicates), then 1 and 3 which need real applications, and 14 last
+since it revokes access.
 
 ## 1. Native apply
 
@@ -57,7 +59,74 @@ The point here is that mentioning a résumé isn't the same as attaching one.
 2. Attach or select a résumé, then trigger it. Expect **Yes**.
 3. Open a job with no résumé step at all. Expect the field **blank**.
 
-## 6. Offline queue
+## 6. Sponsorship detection (international students)
+
+The feature that matters most, and the one most likely to be wrong on a real
+posting. Worth spending ten minutes on.
+
+1. With "I need visa sponsorship" on, open a job whose description says it won't
+   sponsor. Expect a red **⚠ No sponsorship** badge above the floating button.
+   Click it — expect the matched sentence in the tooltip, and the badge to
+   dismiss.
+2. Trigger the overlay on that job. Expect a red banner quoting the sentence,
+   and **Sponsorship = No sponsorship** in the form.
+3. Open a job requiring citizenship or a clearance. Expect **Citizens/PR only**.
+4. Open a job that explicitly sponsors. Expect a green **✓ Sponsors visas**
+   badge and a blue banner.
+5. Open a job that says nothing about it. Expect a grey **? Sponsorship
+   unclear** badge and no banner. Unclear must never read as good news.
+6. Turn off "I need visa sponsorship" in Options. Expect the badge and banners
+   to stop appearing, while the Sponsorship column still gets filled in.
+7. Turn off "Show the sponsorship badge" but leave sponsorship needed on. Expect
+   no badge, but the overlay banner still appears.
+
+If a verdict is wrong, copy the sentence from the posting into a new case in
+`test/utils.test.js` and adjust `WORK_AUTH_RULES` in `shared/utils.js` until it
+passes.
+
+## 7. Deadline and job type
+
+1. Open a job with an "Apply by" date. Expect **Deadline** filled with that date
+   in YYYY-MM-DD, and the year to be right — a bare "Aug 15" in December means
+   next year, not this one.
+2. Open an internship and a full-time posting. Expect **Job Type** to be
+   "Internship" and "Full-time" respectively.
+3. Open a job with no deadline. Expect Deadline blank, not a guess.
+
+## 8. Stats and follow-ups
+
+1. With a few rows in the sheet, open the popup. Expect the four tiles (Applied,
+   This week, Interviews, Ghosted) and a line reading "N% heard back · N still
+   open".
+2. Change a row's Status to "Rejected" in the sheet, reopen the popup. Expect
+   the response rate to move.
+3. Backdate a row's Date Applied by more than the ghost threshold, leaving
+   Status at Applied. Expect the Ghosted tile to count it.
+4. Backdate a row's Follow-up On to yesterday. Expect the popup nudge, and
+   within a day the desktop notification. Clicking it should open your sheet.
+5. Set that row's Status to Rejected. Expect it to drop out of the follow-up
+   count — closed applications don't get chased.
+
+## 9. Company repeat warning
+
+1. Log two jobs at the same company.
+2. On the second, expect the overlay to say "This is application #2 to
+   <company>".
+
+## 10. Keyboard shortcut
+
+1. On a job page press ⌘/Ctrl+Shift+L. Expect the overlay.
+2. Check `chrome://extensions/shortcuts` if it doesn't fire — another extension
+   may already own that combination.
+
+## 11. Schema migration
+
+1. Make a tab with only the original 15 headers (A–O) and a data row.
+2. Point Options at it and hit Connect. Expect "added the new columns", headers
+   P1:U1 filled in, and the existing data row untouched.
+3. Hit Connect again. Expect plain "headers verified" and no further writes.
+
+## 12. Offline queue
 
 1. Open the overlay, then go offline (DevTools → Network → Offline, or turn off
    Wi-Fi).
@@ -66,14 +135,14 @@ The point here is that mentioning a résumé isn't the same as attaching one.
 3. Go back online. Within ~2 minutes, or immediately via popup → "Retry queued
    rows now", the row appears and the badge clears.
 
-## 7. Duplicates
+## 13. Duplicates
 
 1. Log a job, then trigger **Log this job** on the same job again.
 2. Expect the amber "You already logged this job on YYYY-MM-DD" banner, and the
    button now reads **Save anyway**.
 3. Esc → no row. Save anyway → duplicate row appended.
 
-## 8. Token expiry and re-auth
+## 14. Token expiry and re-auth
 
 1. Revoke access at <https://myaccount.google.com/permissions>, or just wait an
    hour for the access token to expire.
@@ -82,39 +151,39 @@ The point here is that mentioning a résumé isn't the same as attaching one.
    consent window opens, and the row saves after you approve.
 3. Dismiss the consent window instead. Expect the row to be queued, not lost.
 
-## 9. Missing optional fields
+## 15. Missing optional fields
 
 1. Find a job with no salary and no industry listed.
 2. Trigger a log. Expect both blank (not guessed), highlighted amber with
    "couldn't auto-detect", and focus on the first missing field. Saving writes
    the blanks as-is.
 
-## 10. Sheet verification
+## 16. Sheet verification
 
 1. Point the options page at an **empty** tab → Connect. Expect "header row
-   written" and A1:O1 filled in.
+   written" and A1:U1 filled in.
 2. Point at a tab with a **different** header → Connect. Expect the mismatch
    warning listing expected vs. found, and no change to the sheet.
 
-## 11. School subdomain
+## 17. School subdomain
 
 1. Use your school's subdomain (`myschool.joinhandshake.com`) rather than
    `app.joinhandshake.com`.
 2. Expect the floating button to appear and everything above to work.
 
-## 12. Formula injection
+## 18. Formula injection
 
 1. Log a job with Notes set to `=1+2`.
 2. Expect the cell to read `=1+2` as literal text (stored as `'=1+2`), not `3`.
 
-## 13. Posted-date sanity
+## 19. Posted-date sanity
 
 1. Find a job whose posted date shows as a bare month and day ("Jul 5") rather
    than a relative "3 days ago".
 2. Expect the current year, not 2001. This is the case `npm test` covers, worth
    one real-page confirmation.
 
-## 14. Quota and permission errors
+## 20. Quota and permission errors
 
 Hard to trigger for real. To simulate: point the options page at a sheet you
 can't edit, save a row, and expect it to queue with the badge showing and the

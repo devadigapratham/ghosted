@@ -43,6 +43,29 @@ globalThis.GHOSTED_SELECTORS = {
       '[data-hook="employer-industry"]',
       '[data-testid="employer-industry"]',
     ],
+    // The description is where work-authorization language hides, so this
+    // wants to be greedy: better to scan too much text than miss the one
+    // sentence about sponsorship.
+    description: [
+      '[data-hook="job-description"]',
+      '[data-testid="job-description"]',
+      '[data-hook="details"]',
+      'section[class*="description"]',
+      'div[class*="description"]',
+      "article",
+      "main",
+    ],
+    deadline: [
+      '[data-hook="apply-by"]',
+      '[data-testid="apply-by"]',
+      '[data-hook="expiration-date"]',
+      '[data-hook="deadline"]',
+    ],
+    jobType: [
+      '[data-hook="job-type"]',
+      '[data-testid="job-type"]',
+      '[data-hook="employment-type"]',
+    ],
   },
 
   // Fallback for "Industry" / "Pay" style label→value layouts: match a short
@@ -52,9 +75,15 @@ globalThis.GHOSTED_SELECTORS = {
     salary: /^(pay|pay rate|salary|compensation|wage|estimated pay)$/i,
     location: /^location(s)?$/i,
     posted: /^(posted|date posted)$/i,
+    deadline: /^(apply by|application deadline|deadline|applications close|closes)$/i,
+    jobType: /^(job type|employment type|type|position type)$/i,
   },
 
   postedTextPattern: /posted\s+((\d+|an?)\+?\s*(minute|hour|day|week|month)s?\s*ago|today|yesterday|on\s+\S.*)/i,
+
+  deadlineTextPattern: /(apply by|applications? (close|due)|deadline)[:\s]+([a-z]{3,9}\.? \d{1,2}(,? \d{4})?|\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|tomorrow|today)/i,
+
+  jobTypeTextPattern: /\b(internship|intern|co-?op|full[- ]time|part[- ]time|contract|temporary|fellowship|new grad|entry level)\b/i,
 
   // $25-30/hr, $90k–$110k, $25.50 per hour
   salaryTextPattern: /\$\s?[\d,.]+\s?k?(\s?[-–—]\s?\$?\s?[\d,.]+\s?k?)?\s*(\/|per\s)?\s*(hr|hour|yr|year|mo|month|week|wk)?/i,

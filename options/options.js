@@ -1,12 +1,24 @@
 const U = globalThis.GHOSTED;
 const $ = (id) => document.getElementById(id);
 
+const CHECKBOXES = ["autoCapture", "remindersEnabled", "needsSponsorship", "showSponsorshipChip"];
+const NUMBERS = ["followUpDays", "ghostAfterDays"];
+
 async function loadSettings() {
   const s = await chrome.storage.sync.get(U.DEFAULT_SETTINGS);
   $("sheetUrl").value = s.spreadsheetId;
   $("sheetName").value = s.sheetName;
-  $("autoCapture").checked = s.autoCapture;
   $("roleOptions").value = s.roleOptions.join(", ");
+  for (const id of CHECKBOXES) $(id).checked = Boolean(s[id]);
+  for (const id of NUMBERS) $(id).value = s[id];
+}
+
+// Keeps a blank or nonsense number from silently disabling reminders.
+function readNumber(id) {
+  const el = $(id);
+  const n = parseInt(el.value, 10);
+  if (!Number.isFinite(n) || n < Number(el.min || 1)) return U.DEFAULT_SETTINGS[id];
+  return Math.min(n, Number(el.max || 365));
 }
 
 async function saveSettings() {
@@ -22,14 +34,18 @@ async function saveSettings() {
     .map((s) => s.trim())
     .filter(Boolean);
 
-  await chrome.storage.sync.set({
+  const next = {
     spreadsheetId,
     sheetName: $("sheetName").value.trim() || "Sheet1",
-    autoCapture: $("autoCapture").checked,
     roleOptions: roleOptions.length ? roleOptions : U.DEFAULT_SETTINGS.roleOptions,
-  });
+  };
+  for (const id of CHECKBOXES) next[id] = $(id).checked;
+  for (const id of NUMBERS) next[id] = readNumber(id);
+
+  await chrome.storage.sync.set(next);
 
   if (spreadsheetId) $("sheetUrl").value = spreadsheetId;
+  for (const id of NUMBERS) $(id).value = next[id];
   setStatus("saveStatus", "Saved ✓", "ok");
   return true;
 }
@@ -50,9 +66,15 @@ function showHeaderResult(resp) {
     setStatus("connectStatus", resp.error || "Failed", "err");
   } else if (resp.header === "written") {
     setStatus("connectStatus", "Connected ✓ — header row written to empty tab", "ok");
+  } else if (resp.header === "upgraded") {
+    setStatus("connectStatus", "Connected ✓ — added the new columns", "ok");
+    warn.hidden = false;
+    warn.className = "note";
+    warn.textContent = `Added to your header row: ${(resp.added || []).join(", ")}. Existing rows are untouched.`;
   } else if (resp.header === "mismatch") {
     setStatus("connectStatus", "Connected, but headers don't match", "err");
     warn.hidden = false;
+    warn.className = "warning";
     warn.textContent =
       "⚠ The tab's header row doesn't match the expected schema. Nothing was overwritten. " +
       `Expected: ${U.COLUMNS.join(" | ")}. Found: ${(resp.existing || []).join(" | ") || "(empty cells)"}. ` +

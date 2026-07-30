@@ -5,7 +5,7 @@
   <style>
     :root { color-scheme: light dark; }
     body {
-      margin: 0; padding: 12px; width: 240px;
+      margin: 0; padding: 12px; width: 268px;
       font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     button {
@@ -17,13 +17,46 @@
     button:hover { filter: brightness(1.1); }
     .queue { font-size: 12px; opacity: .75; margin: 4px 0 10px; }
     .queue.has { color: #b07d00; opacity: 1; }
+
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+      margin: 2px 0 10px;
+    }
+    .stat {
+      border: 1px solid #8883; border-radius: 6px; padding: 6px 8px;
+    }
+    .stat .n { font-size: 17px; font-weight: 700; line-height: 1.1; }
+    .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; opacity: .65; }
+    .stat.ghost .n { color: #b07d00; }
+    .stat.win .n { color: #1b7f4d; }
+    .statsNote { font-size: 11px; opacity: .6; margin: 0 0 10px; }
+    .nudge {
+      font-size: 12px; margin: 0 0 10px; padding: 6px 8px; border-radius: 6px;
+      background: #b07d0022; border: 1px solid #b07d0055;
+    }
+    .hint { font-size: 11px; opacity: .55; margin: 6px 0 0; text-align: center; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
   <button id="logBtn" class="primary">＋ Log this job</button>
+
+  <p id="nudge" class="nudge" hidden></p>
+
+  <div id="stats" class="stats" hidden>
+    <div class="stat"><div class="n" id="sTotal">0</div><div class="k">Applied</div></div>
+    <div class="stat"><div class="n" id="sWeek">0</div><div class="k">This week</div></div>
+    <div class="stat win"><div class="n" id="sInterviews">0</div><div class="k">Interviews</div></div>
+    <div class="stat ghost"><div class="n" id="sGhosted">0</div><div class="k">Ghosted</div></div>
+  </div>
+  <p id="statsNote" class="statsNote" hidden></p>
+
   <div id="queueInfo" class="queue">0 rows waiting to save</div>
   <button id="retryBtn" hidden>↻ Retry queued rows now</button>
+  <button id="sheetBtn">↗ Open my sheet</button>
   <button id="optionsBtn">⚙ Options</button>
+  <p class="hint">⌘/Ctrl+Shift+L logs the current job</p>
+
   <script src="popup.js"></script>
 </body>
 </html>

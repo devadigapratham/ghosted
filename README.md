@@ -6,17 +6,52 @@ exactly who ghosted you.
 Apply to something on [Handshake](https://joinhandshake.com) and a small
 confirmation box pops up with the job details already filled in. Add the two or
 three things it can't know (which role bucket, whether you had a connection
-there), hit Enter, and it appends a row to your sheet. That's the whole product.
+there), hit Enter, and it appends a row to your sheet.
+
+## What it does beyond logging
+
+**Tells you about sponsorship before you apply.** If you need a visa, the only
+thing that matters on a posting is whether the employer will sponsor one — and
+it's always buried in three paragraphs of boilerplate at the bottom. Ghosted
+reads the description and puts a badge on the job page: *Sponsors visas*, *No
+sponsorship*, *Citizens/PR only*, or *Sponsorship unclear*. Click the badge and
+it shows you the exact sentence it matched, so you can judge for yourself. The
+answer also lands in the sheet, so you can filter by it later.
+
+It errs toward warning you. A posting that says nothing is "unclear", never a
+yes. A clearance or ITAR requirement outranks a cheerful "we sponsor H-1B" blurb
+elsewhere on the page, because the restriction is the part that will actually
+stop you.
+
+Not applicable to you? Turn off "I need visa sponsorship" in Options and the
+warnings disappear. The column still gets filled in.
+
+**Chases your follow-ups.** Every row gets a Follow-up On date (two weeks out by
+default). Once a day it counts what's gone quiet and tells you, so applications
+don't rot silently in a spreadsheet you stopped opening.
+
+**Shows you the damage.** The popup has running totals: applied, this week,
+interviews, ghosted, and what share of applications ever got a reply. Silence
+past 21 days counts as ghosted, which is configurable if you're more patient
+than that.
+
+**Catches the deadline.** "Apply by" dates get scraped and stored, so a rolling
+list of postings has actual dates on it.
 
 ## The sheet
 
-One row per application, columns A–O:
+One row per application, columns A–U:
 
-`Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word`
+`Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word | Job Type | Sponsorship | Deadline | Follow-up On | Job URL | Job ID`
 
-The first time you connect, it reads row 1 of your tab. Empty tab, and it
-writes the header for you. Existing headers that don't match, and it tells you
-what's different and refuses to touch anything.
+The first time you connect, it reads row 1 of your tab. Empty tab, and it writes
+the header for you. Existing headers that don't match, and it tells you what's
+different and refuses to touch anything.
+
+If you have a sheet from an earlier version with just the original 15 columns,
+hit **Connect Google & verify sheet** once. It appends the six new headers and
+leaves every existing row alone. New columns are only ever added at the end, so
+old rows stay lined up.
 
 ## Setup
 
@@ -81,7 +116,12 @@ Click the ghost in the toolbar → **⚙ Options**.
 1. Paste your spreadsheet URL (the ID gets parsed out of it) and the tab name,
    e.g. `Sheet1` or `Applications`.
 2. Edit the **Role dropdown options** to whatever buckets you actually use.
-3. Click **Connect Google & verify sheet**. A Google window opens — approve the
+3. Under **Work authorization**, leave "I need visa sponsorship" on if you do.
+   That's what turns on the badge and the pre-apply warnings. Turn it off if
+   you don't need sponsorship and you'd rather not see them.
+4. Under **Follow-ups**, set how many days of silence before it nudges you
+   (default 14) and how many before it calls an application ghosted (default 21).
+5. Click **Connect Google & verify sheet**. A Google window opens — approve the
    Sheets permission. You'll see an "unverified app" warning, which is expected
    for a personal OAuth client; continue past it.
 
@@ -89,6 +129,8 @@ The status line then says one of:
 
 - **headers verified** — done, go apply to something.
 - **header row written** — the tab was empty, so it wrote the header for you.
+- **added the new columns** — your sheet was from an older version; the newer
+  headers got appended and existing rows were left alone.
 - **headers don't match** — it lists expected vs. found. Fix the sheet by hand;
   nothing was overwritten.
 
@@ -110,8 +152,13 @@ external-apply link), the overlay pops up pre-filled. Fill in Role,
 Connections?, Résumé Form?, Notes. Enter saves, Esc skips. Amber fields are
 ones it couldn't scrape.
 
-**Manual.** The floating **＋ Log this job** button on any job page, the
-right-click menu, or the toolbar popup.
+**Manual.** The floating **＋ Log this job** button on any job page,
+**⌘/Ctrl+Shift+L**, the right-click menu, or the toolbar popup.
+
+**Keeping it current.** Status is a dropdown — Applied, Online assessment,
+Phone screen, Interviewing, Final round, Offer, Rejected, Withdrawn, Ghosted.
+Editing it later in the sheet is what makes the stats mean anything, since
+"never heard back" is inferred from a row still sitting at Applied.
 
 **Offline.** Rows that fail to save go into a queue in local storage and retry
 on their own with backoff (1, 2, 4 … up to an hour). The toolbar badge shows
@@ -119,15 +166,23 @@ how many are waiting. You can force a retry from the popup or the options page.
 A row you filled in never gets thrown away, even if the save fails.
 
 **Duplicates.** Every logged job ID is remembered for a year. Log the same job
-twice and the overlay warns you, with the button changing to "Save anyway".
+twice and the overlay warns you, with the button changing to "Save anyway". It
+also tells you when you're applying to a company for the second or third time,
+which is useful right before you write a cover letter about how this is your
+dream company.
 
 ## When Handshake changes
 
 Everything Handshake-specific is in `content/selectors.js` — job title,
-company, location, salary, posted date, the success-toast wording, the
-external-apply link text. Each field is an ordered list, most reliable first.
-`content/content.js` also checks for `application/ld+json` JobPosting data
-before it touches a CSS selector at all.
+company, location, salary, posted date, deadline, description, the success-toast
+wording, the external-apply link text. Each field is an ordered list, most
+reliable first. `content/content.js` also checks for `application/ld+json`
+JobPosting data before it touches a CSS selector at all.
+
+The sponsorship phrase lists are the exception: they live in `shared/utils.js`
+as `WORK_AUTH_RULES`, because they're employer boilerplate rather than anything
+to do with Handshake's markup. Add a phrasing you've run into and add a case to
+`test/utils.test.js` alongside it.
 
 If a field stops scraping:
 
@@ -160,9 +215,9 @@ test/utils.test.js     unit tests (npm test)
 npm test
 ```
 
-74 tests over the pure logic in `shared/utils.js`: date normalization, formula
-escaping, spreadsheet ID parsing, column ordering, dedupe pruning. No
-dependencies, no network, no browser.
+158 tests over the pure logic in `shared/utils.js`: date normalization,
+sponsorship classification, formula escaping, spreadsheet ID parsing, column
+ordering, dedupe pruning, stats. No dependencies, no network, no browser.
 
 Everything that needs a real browser — scraping, submission detection, OAuth,
 the retry queue — is in [TESTPLAN.md](TESTPLAN.md) as a manual checklist.
@@ -178,6 +233,9 @@ supersampled buffer and writes PNGs using only `node:zlib`.
 - OAuth tokens live in the service worker. Content scripts never see one.
 - The only scope requested is `spreadsheets`. No Drive access, so it can't see
   any of your other files.
+- Job descriptions are scanned in the page for sponsorship language and thrown
+  away. Only the verdict is stored, and only in your own sheet. Nothing is sent
+  anywhere except Google Sheets.
 - Scraped text is trimmed, and a leading `=` `+` `-` `@` gets an apostrophe
   before it's written, so a job title can't inject a formula into your sheet.
 
