@@ -18,6 +18,36 @@ async function getSettings() {
   return settings;
 }
 
+// Messages arrive from the extension's own pages, but the payloads originate in
+// scraped pages and imported files, so they are narrowed to the schema before
+// anything is stored.
+const INTERNAL_KEYS = ["id", "savedAt", "synced"];
+
+function sanitizeRow(row) {
+  const clean = {};
+  if (!row || typeof row !== "object") return clean;
+  for (const col of U.COLUMNS) clean[col] = U.sanitizeCell(row[col]);
+  clean["Job URL"] = U.safeHttpUrl(row["Job URL"]);
+  return clean;
+}
+
+function sanitizeStoredRow(row) {
+  const clean = sanitizeRow(row);
+  for (const key of INTERNAL_KEYS) {
+    if (row && row[key] !== undefined) clean[key] = row[key];
+  }
+  return clean;
+}
+
+const validStatus = (status) =>
+  U.STATUS_OPTIONS.includes(String(status || "").trim()) ? String(status).trim() : null;
+
+// A1 row numbers are 1-based; row 1 is the header, so data starts at 2.
+function validRowNumber(value) {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 2 && n <= 1_000_000 ? n : null;
+}
+
 async function getLocal(key, fallback) {
   const o = await chrome.storage.local.get({ [key]: fallback });
   return o[key];
@@ -184,7 +214,7 @@ async function readStats({ interactive = false } = {}) {
 // or no sheet at all never costs you a row.
 async function saveApplication(row) {
   const apps = await getLocal("applications", []);
-  apps.push({ ...row, id: crypto.randomUUID(), savedAt: Date.now(), synced: false });
+  apps.push({ ...sanitizeRow(row), id: crypto.randomUUID(), savedAt: Date.now(), synced: false });
   if (apps.length > U.APPLICATIONS_MAX) apps.splice(0, apps.length - U.APPLICATIONS_MAX);
   await chrome.storage.local.set({ applications: apps });
   return apps[apps.length - 1].id;
@@ -475,18 +505,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
       case "setStatus":
         try {
-          if (msg.source === "sheet" && msg.rowNumber) {
-            return await writeSheetCell(msg.rowNumber, "Status", msg.status);
+          const status = validStatus(msg.status);
+          if (!status) return { ok: false, error: "Unknown status" };
+
+          if (msg.source === "sheet") {
+            const rowNumber = validRowNumber(msg.rowNumber);
+            if (!rowNumber) return { ok: false, error: "Bad row reference" };
+            return await writeSheetCell(rowNumber, "Status", status);
           }
-          return await updateApplication(msg.id, { Status: msg.status });
+          return await updateApplication(msg.id, { Status: status });
         } catch (e) {
           return { ok: false, error: e.message };
         }
 
       case "importApplications": {
+        if (!Array.isArray(msg.rows)) return { ok: false, error: "Nothing to import" };
         const apps = await getLocal("applications", []);
-        const stamped = (msg.rows || []).map((row) => ({
-          ...row,
+        // Cap the batch so one file cannot blow the storage quota.
+        const stamped = msg.rows.slice(0, U.APPLICATIONS_MAX).map((row) => ({
+          ...sanitizeRow(row),
           id: crypto.randomUUID(),
           savedAt: Date.now(),
           synced: false,
@@ -497,14 +534,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
 
       case "restoreApplication": {
+        if (!msg.row?.id) return { ok: false, error: "Nothing to restore" };
         const apps = await getLocal("applications", []);
-        if (!apps.some((a) => a.id === msg.row?.id)) apps.push(msg.row);
+        if (!apps.some((a) => a.id === msg.row.id)) apps.push(sanitizeStoredRow(msg.row));
         await chrome.storage.local.set({ applications: apps });
         return { ok: true };
       }
 
-      case "updateApplication":
-        return updateApplication(msg.id, msg.changes || {});
+      case "updateApplication": {
+        // Only schema columns are writable from a message.
+        const changes = {};
+        for (const [key, value] of Object.entries(msg.changes || {})) {
+          if (U.COLUMNS.includes(key)) changes[key] = U.sanitizeCell(value);
+        }
+        if (!Object.keys(changes).length) return { ok: false, error: "No writable fields" };
+        return updateApplication(msg.id, changes);
+      }
 
       case "deleteApplication":
         return deleteApplication(msg.id);

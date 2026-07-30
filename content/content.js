@@ -166,7 +166,7 @@
       if (t.length > best.length) best = t;
       if (best.length > 400 && sel !== "main" && sel !== "article") break;
     }
-    return best.slice(0, 20_000);
+    return U.descriptionWindow(best);
   }
 
   function scrapeJob() {

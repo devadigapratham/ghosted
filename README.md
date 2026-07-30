@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-330%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-338%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to, so you know exactly who ghosted you.
@@ -362,7 +362,7 @@ npm test
 ```
 
 ```sh
-npm test           # 280 unit tests, no dependencies, no browser
+npm test           # 288 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
@@ -405,6 +405,11 @@ checked by eye.
 `icons/*.png` are generated, not drawn. Edit the constants at the top of
 `tools/make-icons.js` and run `npm run icons`. It rasterizes the ghost into a
 supersampled buffer and writes PNGs using only `node:zlib`.
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the threat model, the trust boundaries, why
+each permission is requested, and known limitations.
 
 ## Privacy
 

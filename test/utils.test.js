@@ -1194,3 +1194,48 @@ test.describe("import strips unsafe Job URLs", () => {
     assert.strictEqual(rows[0].Position, "SWE Intern");
   });
 });
+
+test.describe("descriptionWindow", () => {
+  test("short text is returned unchanged", () => {
+    assert.strictEqual(U.descriptionWindow("short"), "short");
+  });
+
+  test("text at the limit is unchanged", () => {
+    const exact = "x".repeat(U.DESCRIPTION_MAX);
+    assert.strictEqual(U.descriptionWindow(exact), exact);
+  });
+
+  test("long text is bounded", () => {
+    const out = U.descriptionWindow("x".repeat(U.DESCRIPTION_MAX * 3));
+    assert.ok(out.length <= U.DESCRIPTION_MAX + 3, `got ${out.length}`);
+  });
+
+  test("keeps the head", () => {
+    const text = "HEADMARKER" + "x".repeat(U.DESCRIPTION_MAX * 2);
+    assert.ok(U.descriptionWindow(text).startsWith("HEADMARKER"));
+  });
+
+  test("keeps the tail, which a plain truncation would drop", () => {
+    const text = "x".repeat(U.DESCRIPTION_MAX * 2) + "TAILMARKER";
+    assert.ok(U.descriptionWindow(text).endsWith("TAILMARKER"));
+  });
+
+  test("sponsorship language in trailing boilerplate still classifies", () => {
+    // Regression: truncating to the first N characters silently lost the
+    // sponsorship verdict on long postings.
+    const posting = "Great role. ".repeat(3000) + "We are not able to provide visa sponsorship.";
+    assert.strictEqual(U.classifyWorkAuth(U.descriptionWindow(posting)).status, "No sponsorship");
+    assert.strictEqual(U.classifyWorkAuth(posting.slice(0, U.DESCRIPTION_MAX)).status, "");
+  });
+
+  test("scanning a bounded window is fast", () => {
+    const t0 = Date.now();
+    U.classifyWorkAuth(U.descriptionWindow("word ".repeat(50_000)));
+    assert.ok(Date.now() - t0 < 500, "classify should stay well under half a second");
+  });
+
+  test("handles nullish input", () => {
+    assert.strictEqual(U.descriptionWindow(null), "");
+    assert.strictEqual(U.descriptionWindow(undefined), "");
+  });
+});

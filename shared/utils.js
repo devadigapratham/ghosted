@@ -263,6 +263,19 @@
     },
   ];
 
+  // Bounds how much description text the classifier sees. Keeps both ends,
+  // because the role description is at the top but work-authorisation
+  // boilerplate is almost always in the trailing legal text, so a plain
+  // truncation drops the part that decides the verdict.
+  const DESCRIPTION_MAX = 20_000;
+
+  function descriptionWindow(text, max = DESCRIPTION_MAX) {
+    const s = String(text ?? "");
+    if (s.length <= max) return s;
+    const half = Math.floor(max / 2);
+    return `${s.slice(0, half)} … ${s.slice(-half)}`;
+  }
+
   // Splits into sentence-ish chunks so the evidence we surface is readable.
   function sentences(text) {
     return String(text || "")
@@ -678,6 +691,8 @@
     parsePostedDate,
     parseDeadline,
     classifyWorkAuth,
+    DESCRIPTION_MAX,
+    descriptionWindow,
     isSponsorshipBlocker,
     normalizeJobType,
     sanitizeCell,

@@ -73,10 +73,13 @@
       getRows: async () => ({ ok: true, source: "local", rows: U.sortApplications(readApps()) }),
 
       setStatus: async (row, status) => {
+        if (!U.STATUS_OPTIONS.includes(String(status || "").trim())) {
+          return { ok: false, error: "Unknown status" };
+        }
         const apps = readApps();
         const hit = apps.find((a) => a.id === row.id);
         if (!hit) return { ok: false, error: "Not found" };
-        hit.Status = status;
+        hit.Status = String(status).trim();
         writeApps(apps);
         return { ok: true };
       },
@@ -94,7 +97,13 @@
       },
 
       importRows: async (rows) => {
-        const stamped = rows.map((r) => ({ ...r, id: newId(), savedAt: Date.now(), synced: false }));
+        if (!Array.isArray(rows)) return { ok: false, error: "Nothing to import" };
+        const stamped = rows.slice(0, U.APPLICATIONS_MAX).map((r) => {
+          const clean = {};
+          for (const col of U.COLUMNS) clean[col] = U.sanitizeCell(r[col]);
+          clean["Job URL"] = U.safeHttpUrl(r["Job URL"]);
+          return { ...clean, id: newId(), savedAt: Date.now(), synced: false };
+        });
         const { merged, added, skipped } = U.mergeApplications(readApps(), stamped);
         writeApps(merged.slice(-U.APPLICATIONS_MAX));
         return { ok: true, added, skipped };
