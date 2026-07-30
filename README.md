@@ -61,30 +61,27 @@ Light and dark themes, and a toggle if you want to override your OS setting.
 
 ## What it does beyond logging
 
-**Tells you about sponsorship before you apply.** If you need a visa, the only
-thing that matters on a posting is whether the employer will sponsor one — and
-it's always buried in three paragraphs of boilerplate at the bottom. Ghosted
-reads the description and puts a badge on the job page: *Sponsors visas*, *No
+**Tells you about sponsorship before you apply.** If you need a visa, whether
+the employer sponsors is the first thing that matters and it is usually buried in
+boilerplate at the bottom of the posting. Ghosted reads the description and puts
+a badge on the job page: *Sponsors visas*, *No
 sponsorship*, *Citizens/PR only*, or *Sponsorship unclear*. Click the badge and
 it shows you the exact sentence it matched, so you can judge for yourself. The
 answer also lands in the sheet, so you can filter by it later.
 
-It errs toward warning you. A posting that says nothing is "unclear", never a
-yes. A clearance or ITAR requirement outranks a cheerful "we sponsor H-1B" blurb
-elsewhere on the page, because the restriction is the part that will actually
-stop you.
+Detection errs toward warning. A posting that says nothing is "unclear", never a
+yes, and a clearance or ITAR requirement outranks a "we sponsor H-1B" line
+elsewhere on the page.
 
-Not applicable to you? Turn off "I need visa sponsorship" in Options and the
-warnings disappear. The column still gets filled in.
+Turning off "I need visa sponsorship" in settings hides the warnings; the column
+is still recorded.
 
-**Chases your follow-ups.** Every row gets a Follow-up On date (two weeks out by
-default). Once a day it counts what's gone quiet and tells you, so applications
-don't rot silently in a spreadsheet you stopped opening.
+**Tracks follow-ups.** Every row gets a Follow-up On date, two weeks out by
+default. A daily check counts what has gone quiet and notifies once.
 
-**Shows you the damage.** The popup has running totals: applied, this week,
-interviews, ghosted, and what share of applications ever got a reply. Silence
-past 21 days counts as ghosted, which is configurable if you're more patient
-than that.
+**Reports outcomes.** Running totals for applied, this week, interviews, ghosted,
+and the share that ever got a reply. Silence past 21 days counts as ghosted;
+configurable.
 
 **Catches the deadline.** "Apply by" dates get scraped and stored, so a rolling
 list of postings has actual dates on it.
@@ -233,9 +230,7 @@ A row you filled in never gets thrown away, even if the save fails.
 
 **Duplicates.** Every logged job ID is remembered for a year. Log the same job
 twice and the overlay warns you, with the button changing to "Save anyway". It
-also tells you when you're applying to a company for the second or third time,
-which is useful right before you write a cover letter about how this is your
-dream company.
+also reports when you're applying to the same company again.
 
 ## When Handshake changes
 
@@ -275,6 +270,11 @@ tools/make-icons.js    regenerates icons/ (npm run icons)
 test/utils.test.js     unit tests (npm test)
 ```
 
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the component layout, trust
+boundaries, per-user isolation, and the cost analysis at scale.
+
 ## Tests
 
 ```sh
@@ -300,16 +300,14 @@ they look plain:
 - **Where they stand** is also one hue. Colouring nine status bars nine different
   ways, or shading them darker-where-bigger, would spend the colour channel on
   information the bar length already carries.
-- **Sponsorship** is the *emphasis* form: the postings that can't hire you are in
-  the critical red, everything else recedes to gray. A green/red pair was the
-  obvious first choice and it was wrong — green vs red measures ΔE 4.1 under
-  deuteranopia, well under the ΔE 8 threshold, so for a red-green colourblind
-  reader the two most important categories would have been the same colour.
-  Every verdict also carries a glyph and a text label, so hue is never the only
-  channel.
+- **Sponsorship** uses the emphasis form: postings that can't hire you are in
+  the critical red, everything else recedes to gray. A green/red pair measures
+  ΔE 4.1 under deuteranopia against a threshold of 8, so the two most important
+  categories would be indistinguishable for a red-green colourblind reader.
+  Every verdict also carries a glyph and a text label.
 
-The palette is checked with a validator rather than by eye, against both the
-light and dark surfaces.
+The palette is validated against both the light and dark surfaces rather than
+checked by eye.
 
 ## Icons
 

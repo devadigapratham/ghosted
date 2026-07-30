@@ -53,7 +53,7 @@ valid job page.
 
 ## 5. Résumé upload detection
 
-The point here is that mentioning a résumé isn't the same as attaching one.
+Mentioning a résumé is not the same as attaching one.
 
 1. Open an apply modal that has a résumé step but don't attach anything.
    Trigger the overlay. Expect **Résumé upload? = No**.
@@ -62,8 +62,8 @@ The point here is that mentioning a résumé isn't the same as attaching one.
 
 ## 6. Sponsorship detection (international students)
 
-The feature that matters most, and the one most likely to be wrong on a real
-posting. Worth spending ten minutes on.
+The most consequential feature, and the one most likely to misread a real
+posting.
 
 1. With "I need visa sponsorship" on, open a job whose description says it won't
    sponsor. Expect a red **⚠ No sponsorship** badge above the floating button.
@@ -158,8 +158,7 @@ Open it from the popup → **Open dashboard**, or right-click the icon → Optio
 
 ## 13. Local mode, no Google account
 
-The default path, and the one most people will use. Do this with the sheet
-fields in Options left blank.
+The default path. Run this with the sheet fields left blank.
 
 1. Fresh install, no sheet configured. Log a job. Expect a plain "✓ Saved"
    toast, no auth prompt, and no error.
@@ -185,7 +184,7 @@ fields in Options left blank.
 
 ## 15. Nothing is lost when the sheet fails (needs a sheet)
 
-The point of saving locally first.
+Verifies that saving locally first actually protects the row.
 
 1. Connect a sheet, then break it — change the tab name in Options to one that
    doesn't exist.
