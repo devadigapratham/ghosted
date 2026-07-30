@@ -8,6 +8,9 @@ const RETRY_ALARM = "ghosted-retry";
 const FOLLOWUP_ALARM = "ghosted-followup";
 const FOLLOWUP_NOTIFICATION = "ghosted-followup-note";
 
+// Kept in step with content_scripts.matches in the manifest.
+const JOB_SITE_PATTERNS = chrome.runtime.getManifest().content_scripts[0].matches;
+
 async function getSettings() {
   const settings = await chrome.storage.sync.get(U.DEFAULT_SETTINGS);
   // Never let anything but a well-formed id reach a request URL.
@@ -399,11 +402,7 @@ chrome.runtime.onInstalled.addListener(() => {
     id: "ghosted-log",
     title: "Log this job to Google Sheet",
     contexts: ["page"],
-    documentUrlPatterns: [
-      "https://*.joinhandshake.com/*",
-      "https://*.joinhandshake.co.uk/*",
-      "https://*.joinhandshake.de/*",
-    ],
+    documentUrlPatterns: JOB_SITE_PATTERNS,
   });
   scheduleAlarms();
 });

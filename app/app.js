@@ -791,8 +791,8 @@ $("themeBtn").addEventListener("click", async () => {
   const next = isDark ? "light" : "dark";
   root.dataset.theme = next;
   await DS.setTheme(next);
-  // Marks are CSS-variable driven, so the charts need re-reading of nothing —
-  // but the tooltip may be mid-flight.
+  // Chart marks are driven by CSS variables, so they retheme themselves. Only a
+  // tooltip caught mid-hover needs clearing.
   hideTip();
 });
 

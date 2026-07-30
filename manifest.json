@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Ghosted",
   "version": "1.0.0",
-  "description": "Logs every job you apply to on Handshake into a Google Sheet, so you know exactly who ghosted you.",
+  "description": "Logs every job you apply to on Handshake, Greenhouse, Lever, Workday, LinkedIn and more, and flags visa-sponsorship blockers before you apply.",
   "minimum_chrome_version": "111",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2FdkRWnwz5eYe574GdhwQFHLYgP7JZr7yeNcId3dTOqKqvdQPL2mgkZ/1ZoDZ8gKxxj4YdneT26W604fg6YbRD/Y1D5/LYUcCZi00zcxvzY1IQm53jRuYfAk441WWPbBQVOqf3TkyXd+tDnAWwZAsY7CfEm2NoPt4otGKUaCIb60tBQU4BhLUvhcc7J/NFgEC5jrlt8q4sO5dQUxdri9WLMNoYNHVqfyWbs1waACdNdkxIv2k7FXX4oS+zd8qgu4mwfi3EBYU/MwOyLjvTIjNdGh5mBhLBhoSFsaAG5SlvXxVW9aa2NtWxvjNSRSzDb0NK/OM/5sCdKyxJTIz87qxwIDAQAB",
   "icons": {
@@ -11,14 +11,26 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["storage", "identity", "contextMenus", "alarms", "activeTab", "notifications"],
+  "permissions": [
+    "storage",
+    "identity",
+    "contextMenus",
+    "alarms",
+    "activeTab",
+    "notifications"
+  ],
   "commands": {
     "log-job": {
-      "suggested_key": { "default": "Ctrl+Shift+L", "mac": "Command+Shift+L" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
       "description": "Log the current Handshake job"
     }
   },
-  "host_permissions": ["https://sheets.googleapis.com/"],
+  "host_permissions": [
+    "https://sheets.googleapis.com/"
+  ],
   "background": {
     "service_worker": "background.js"
   },
@@ -27,9 +39,19 @@
       "matches": [
         "https://*.joinhandshake.com/*",
         "https://*.joinhandshake.co.uk/*",
-        "https://*.joinhandshake.de/*"
+        "https://*.joinhandshake.de/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.workable.com/*",
+        "https://*.linkedin.com/*",
+        "https://*.indeed.com/*"
       ],
-      "js": ["content/urlwatch.js"],
+      "js": [
+        "content/urlwatch.js"
+      ],
       "world": "MAIN",
       "run_at": "document_start"
     },
@@ -37,9 +59,21 @@
       "matches": [
         "https://*.joinhandshake.com/*",
         "https://*.joinhandshake.co.uk/*",
-        "https://*.joinhandshake.de/*"
+        "https://*.joinhandshake.de/*",
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.workable.com/*",
+        "https://*.linkedin.com/*",
+        "https://*.indeed.com/*"
       ],
-      "js": ["shared/utils.js", "content/selectors.js", "content/content.js"],
+      "js": [
+        "shared/utils.js",
+        "content/selectors.js",
+        "content/content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -59,6 +93,8 @@
   },
   "oauth2": {
     "client_id": "PASTE_YOUR_CLIENT_ID_HERE.apps.googleusercontent.com",
-    "scopes": ["https://www.googleapis.com/auth/spreadsheets"]
+    "scopes": [
+      "https://www.googleapis.com/auth/spreadsheets"
+    ]
   }
 }

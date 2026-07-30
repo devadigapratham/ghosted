@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const HANDSHAKE = /^https:\/\/[^/]*joinhandshake\.(com|co\.uk|de)\//;
+const JOB_SITE = /^https:\/\/[^/]*(joinhandshake\.(com|co\.uk|de)|greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|smartrecruiters\.com|workable\.com|linkedin\.com|indeed\.(com|co\.uk|ca|de|in))\//;
 
 const ask = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
 
@@ -55,8 +55,8 @@ $("logBtn").addEventListener("click", async () => {
 
   // tab.url is only readable because of the activeTab permission, which Chrome
   // grants for this tab the moment the user clicks the toolbar icon.
-  if (!tab?.id || !HANDSHAKE.test(tab.url || "")) {
-    $("logBtn").textContent = "Open a Handshake page first";
+  if (!tab?.id || !JOB_SITE.test(tab.url || "")) {
+    $("logBtn").textContent = "Open a job posting first";
     return;
   }
 

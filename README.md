@@ -2,13 +2,14 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-276%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-330%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
-Logs every job you apply to on Handshake, so you know exactly who ghosted you.
+Logs every job you apply to, so you know exactly who ghosted you.
 
-Apply to something on [Handshake](https://joinhandshake.com) and a small
-confirmation box pops up with the job details already filled in. Add the two or
+Apply to something on Handshake, Greenhouse, Lever, Ashby, Workday, LinkedIn,
+Indeed, SmartRecruiters or Workable and a small confirmation box pops up with the
+job details already filled in. Add the two or
 three things it can't know (which role bucket, whether you had a connection
 there), hit Enter, and it's logged.
 
@@ -278,9 +279,38 @@ A row you filled in never gets thrown away, even if the save fails.
 twice and the overlay warns you, with the button changing to "Save anyway". It
 also reports when you're applying to the same company again.
 
-## When Handshake changes
+## Supported job boards
 
-Everything Handshake-specific is in `content/selectors.js` — job title,
+| Board | Hosts | Notes |
+|---|---|---|
+| Handshake | `*.joinhandshake.com/.co.uk/.de` | Most thoroughly targeted; covers every school subdomain |
+| Greenhouse | `*.greenhouse.io` | |
+| Lever | `*.lever.co` | |
+| Ashby | `*.ashbyhq.com` | |
+| Workday | `*.myworkdayjobs.com` | |
+| SmartRecruiters | `*.smartrecruiters.com` | |
+| Workable | `*.workable.com` | |
+| LinkedIn | `*.linkedin.com` | |
+| Indeed | `*.indeed.com/.co.uk/.ca/.de/.in` | |
+
+Most of these emit `application/ld+json` JobPosting data, which is checked before
+any CSS selector, so scraping holds up better than a pile of hand-written
+selectors would. Per-board selectors fill in what structured data omits.
+
+Boards other than Handshake are newer and less exercised. If a field comes back
+blank, the overlay flags it amber and you type it in; nothing breaks.
+
+### Adding a board
+
+Append an entry to `GHOSTED_SITES` in `content/selectors.js` with a `host` regex
+and `jobIdPatterns`, plus any `css` overrides. Board selectors are tried before
+the shared fallbacks. Add the host to `content_scripts.matches` in
+`manifest.json` and to the `JOB_SITE` pattern in `popup/popup.js`, then add a
+case to `test/sites.test.js`.
+
+## When a board changes
+
+Everything board-specific is in `content/selectors.js` — job title,
 company, location, salary, posted date, deadline, description, the success-toast
 wording, the external-apply link text. Each field is an ordered list, most
 reliable first. `content/content.js` also checks for `application/ld+json`
@@ -315,7 +345,8 @@ app/data-source.js     storage backend: extension worker or localStorage
 web/index.html         landing page for the hosted build
 icons/                 generated, don't hand-edit
 tools/make-icons.js    regenerates icons/ (npm run icons)
-test/utils.test.js     unit tests (npm test)
+test/utils.test.js     unit tests for shared logic
+test/sites.test.js     unit tests for the board registry
 test/browser.html      browser integration suite
 ```
 
@@ -331,13 +362,14 @@ npm test
 ```
 
 ```sh
-npm test           # 226 unit tests, no dependencies, no browser
+npm test           # 280 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
 The unit tests cover the pure logic in `shared/utils.js`: date normalization,
 sponsorship classification, formula escaping, spreadsheet ID parsing, column
-ordering, dedupe pruning, stats, CSV/TSV export, the import parser and merge.
+ordering, dedupe pruning, stats, CSV/TSV export, the import parser and merge,
+URL scheme validation, and the per-board selector registry.
 
 The browser suite is 50 integration tests that drive the real dashboard in an
 iframe against real `localStorage` — KPI arithmetic, chart geometry, filters,
@@ -382,8 +414,13 @@ supersampled buffer and writes PNGs using only `node:zlib`.
 - The only scope requested is `spreadsheets`. No Drive access, so it can't see
   any of your other files.
 - Job descriptions are scanned in the page for sponsorship language and thrown
-  away. Only the verdict is stored, and only in your own sheet. Nothing is sent
-  anywhere except Google Sheets.
+  away. Only the verdict is stored. Nothing is sent anywhere except Google
+  Sheets, and only if you connect one.
+- The content script runs on the job boards listed above. It reads the page to
+  find job details and does not write to it, apart from its own floating button
+  and overlay. It does not run anywhere else.
+- Imported files are treated as untrusted: a `Job URL` is only kept if it parses
+  as `http`/`https`, so a shared export cannot smuggle in a `javascript:` link.
 - Scraped text is trimmed, and a leading `=` `+` `-` `@` gets an apostrophe
   before it's written, so a job title can't inject a formula into your sheet.
 

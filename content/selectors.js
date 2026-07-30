@@ -1,6 +1,12 @@
-// Every Handshake-specific selector and text pattern lives here. When
-// Handshake redesigns, this should be the only file you touch.
-// Order matters: data-hook/data-testid first, generic fallbacks last.
+// Every site-specific selector and text pattern lives here. When a job board
+// redesigns, this should be the only file you touch.
+//
+// The object below is the shared baseline that works anywhere, mostly by way of
+// JSON-LD JobPosting data. SITES underneath it holds per-board overrides, which
+// are merged over the baseline by resolveSite().
+//
+// Order matters within a selector list: data-hook/data-testid first, generic
+// fallbacks last.
 globalThis.GHOSTED_SELECTORS = {
   jobIdPatterns: [
     /\/jobs?\/(\d+)/,
@@ -88,7 +94,7 @@ globalThis.GHOSTED_SELECTORS = {
   // $25-30/hr, $90k–$110k, $25.50 per hour
   salaryTextPattern: /\$\s?[\d,.]+\s?k?(\s?[-–—]\s?\$?\s?[\d,.]+\s?k?)?\s*(\/|per\s)?\s*(hr|hour|yr|year|mo|month|week|wk)?/i,
 
-  successText: /(application\s+(was\s+)?submitted|successfully\s+(applied|submitted)|you('|’)ve\s+applied|application\s+received|thanks?\s+for\s+applying)/i,
+  successText: /(application\s+(was\s+)?(submitted|received|complete)|successfully\s+(applied|submitted)|you('|’)ve\s+applied|application\s+received|thanks?\s+(you\s+)?for\s+(applying|your\s+(application|interest))|we('|’)ve\s+received\s+your\s+application|your\s+application\s+(has\s+been\s+)?(sent|submitted|received))/i,
 
   appliedButton: /^applied\s*(✓)?$/i,
 
@@ -114,4 +120,126 @@ globalThis.GHOSTED_SELECTORS = {
     // "Uploaded", "Attached", "Selected: my_resume.pdf"
     attachedText: /(uploaded|attached|selected|replace file|remove file)/i,
   },
+};
+
+// Per-board overrides, merged over the baseline above. A board that emits
+// JSON-LD JobPosting data needs almost nothing here; the entries exist for the
+// fields structured data usually omits.
+globalThis.GHOSTED_SITES = [
+  {
+    id: "handshake",
+    name: "Handshake",
+    host: /(^|\.)joinhandshake\.(com|co\.uk|de)$/i,
+    jobIdPatterns: [/\/jobs?\/(\d+)/, /\/postings\/(\d+)/, /[?&]job_id=(\d+)/, /[?&]jobId=(\d+)/],
+  },
+  {
+    id: "greenhouse",
+    name: "Greenhouse",
+    host: /(^|\.)(greenhouse\.io|boards\.greenhouse\.io)$/i,
+    jobIdPatterns: [/[?&]gh_jid=(\d+)/, /\/jobs\/(\d+)/],
+    css: {
+      title: ["h1.app-title", '[class*="job__title"] h1', "h1"],
+      company: [".company-name", '[class*="company"]', 'meta[property="og:site_name"]'],
+      location: [".location", '[class*="location"]'],
+      description: ["#content", "#app_body", '[class*="job__description"]', "main"],
+    },
+  },
+  {
+    id: "lever",
+    name: "Lever",
+    host: /(^|\.)(lever\.co|jobs\.lever\.co)$/i,
+    jobIdPatterns: [/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i],
+    css: {
+      title: [".posting-headline h2", "h2"],
+      company: [".main-header-logo img", 'meta[property="og:site_name"]'],
+      location: [".posting-categories .location", '[class*="location"]'],
+      description: [".posting-page", '[class*="section-wrapper"]', "main"],
+    },
+  },
+  {
+    id: "ashby",
+    name: "Ashby",
+    host: /(^|\.)ashbyhq\.com$/i,
+    jobIdPatterns: [/\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i],
+    css: {
+      title: ['[class*="_title"]', "h1"],
+      description: ['[class*="_description"]', "main"],
+    },
+  },
+  {
+    id: "workday",
+    name: "Workday",
+    host: /(^|\.)myworkdayjobs\.com$/i,
+    jobIdPatterns: [/\/job\/[^/]+\/[^/]*?_(R?-?\d[\w-]*)/i, /[?&]jobId=([\w-]+)/],
+    css: {
+      title: ['[data-automation-id="jobPostingHeader"]', "h1"],
+      location: ['[data-automation-id="locations"]', '[data-automation-id="location"]'],
+      posted: ['[data-automation-id="postedOn"]'],
+      jobType: ['[data-automation-id="time"]'],
+      description: ['[data-automation-id="jobPostingDescription"]', "main"],
+    },
+  },
+  {
+    id: "smartrecruiters",
+    name: "SmartRecruiters",
+    host: /(^|\.)smartrecruiters\.com$/i,
+    jobIdPatterns: [/\/(\d{6,})(?:-|$)/],
+    css: { description: ['[class*="job-sections"]', "main"] },
+  },
+  {
+    id: "workable",
+    name: "Workable",
+    host: /(^|\.)workable\.com$/i,
+    jobIdPatterns: [/\/j\/([0-9A-F]{6,})/i],
+    css: { description: ['[data-ui="job-description"]', "main"] },
+  },
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    host: /(^|\.)linkedin\.com$/i,
+    jobIdPatterns: [/\/jobs\/view\/(\d+)/, /[?&]currentJobId=(\d+)/],
+    css: {
+      title: [".job-details-jobs-unified-top-card__job-title", ".top-card-layout__title", "h1"],
+      company: [".job-details-jobs-unified-top-card__company-name", ".topcard__org-name-link"],
+      location: [".job-details-jobs-unified-top-card__bullet", ".topcard__flavor--bullet"],
+      description: [".jobs-description__content", ".description__text", "main"],
+    },
+    // LinkedIn's Easy Apply is a modal; an external apply leaves the site.
+    externalApply: /(apply\s+on\s+company\s+(site|website)|apply\s+externally)/i,
+  },
+  {
+    id: "indeed",
+    name: "Indeed",
+    host: /(^|\.)indeed\.(com|co\.uk|ca|de|in)$/i,
+    jobIdPatterns: [/[?&]jk=([0-9a-f]+)/i, /[?&]vjk=([0-9a-f]+)/i],
+    css: {
+      title: ['[data-testid="jobsearch-JobInfoHeader-title"]', ".jobsearch-JobInfoHeader-title", "h1"],
+      company: ['[data-testid="inlineHeader-companyName"]', '[data-company-name="true"]'],
+      location: ['[data-testid="inlineHeader-companyLocation"]', '[data-testid="job-location"]'],
+      description: ["#jobDescriptionText", "main"],
+    },
+  },
+];
+
+// Merges a board's overrides over the baseline. Selector groups merge key by
+// key, with the board's list first so its specific hooks are tried before the
+// generic fallbacks.
+globalThis.GHOSTED_RESOLVE_SITE = function resolveSite(hostname) {
+  const base = globalThis.GHOSTED_SELECTORS;
+  const site = globalThis.GHOSTED_SITES.find((s) => s.host.test(String(hostname || "")));
+  if (!site) return { ...base, siteId: "generic", siteName: "this page" };
+
+  const merged = { ...base, siteId: site.id, siteName: site.name };
+  for (const [key, value] of Object.entries(site)) {
+    if (key === "host" || key === "id" || key === "name") continue;
+    if (key === "css") {
+      merged.css = { ...base.css };
+      for (const [field, list] of Object.entries(value)) {
+        merged.css[field] = [...list, ...(base.css[field] || [])];
+      }
+    } else {
+      merged[key] = value;
+    }
+  }
+  return merged;
 };

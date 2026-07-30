@@ -3,7 +3,8 @@
 (() => {
   if (window.top !== window) return;
 
-  const S = globalThis.GHOSTED_SELECTORS;
+  // Selectors for whichever board this is, merged over the shared baseline.
+  let S = globalThis.GHOSTED_RESOLVE_SITE(location.hostname);
   const U = globalThis.GHOSTED;
 
   let settings = { ...U.DEFAULT_SETTINGS };
@@ -36,12 +37,13 @@
     };
   }
 
+  // The board's own identifier, kept bare so it reads cleanly in the sheet.
   function getJobId() {
     for (const p of S.jobIdPatterns) {
       const m = location.href.match(p);
       if (m) return m[1];
     }
-    // Split view keeps the job id on the selected card, not in the URL.
+    // Handshake's split view keeps the id on the selected card, not in the URL.
     const selected = document.querySelector(
       'a[aria-current="true"][href*="/jobs/"], [aria-selected="true"] a[href*="/jobs/"]'
     );
@@ -49,14 +51,37 @@
       const m = selected.getAttribute("href").match(/\/jobs?\/(\d+)/);
       if (m) return m[1];
     }
+    // Boards with no id pattern still need something stable, and the canonical
+    // path is it. Without this the floating button never appears on them.
+    if (looksLikeJobPage()) return canonicalPath();
     return null;
   }
 
-  function jobUrl(jobId) {
-    // Prefer a canonical /jobs/<id> URL over whatever search params we're on.
-    if (jobId && !new RegExp(`/jobs?/${jobId}\\b`).test(location.pathname)) {
-      return `${location.origin}/jobs/${jobId}`;
+  // Dedupe key. Prefixed with the board so two sites can't collide on "1234".
+  function jobKey(jobId) {
+    return jobId ? `${S.siteId}:${jobId}` : null;
+  }
+
+  function canonicalPath() {
+    const link = document.querySelector('link[rel="canonical"]')?.getAttribute("href");
+    try {
+      return link ? new URL(link, location.href).pathname : location.pathname;
+    } catch {
+      return location.pathname;
     }
+  }
+
+  // Structured job data, or a URL that says "job", is enough to offer logging.
+  function looksLikeJobPage() {
+    if (jsonLdJobPosting()) return true;
+    return /\/(jobs?|careers?|opening|posting|apply|vacanc)/i.test(location.pathname);
+  }
+
+  function jobUrl() {
+    const link = document.querySelector('link[rel="canonical"]')?.getAttribute("href");
+    const canonical = U.safeHttpUrl(link);
+    if (canonical) return canonical;
+    // Drop the query string: it is usually tracking, and the path identifies the job.
     return location.origin + location.pathname;
   }
 
@@ -350,9 +375,10 @@
   function onSubmissionDetected() {
     const jobId = pendingApp?.jobId || getJobId();
     if (jobId) {
-      const last = recentlyLogged.get(jobId);
+      const key = jobKey(jobId);
+      const last = recentlyLogged.get(key);
       if (last && Date.now() - last < 60_000) return; // toast + button flip both fire
-      recentlyLogged.set(jobId, Date.now());
+      recentlyLogged.set(key, Date.now());
     }
     triggerLog({ auto: true });
   }
@@ -391,8 +417,8 @@
       if (!S.externalApply.test(label)) return;
 
       const jobId = getJobId();
-      if (jobId && Date.now() - (recentlyLogged.get(jobId) || 0) < 60_000) return;
-      if (jobId) recentlyLogged.set(jobId, Date.now());
+      if (jobId && Date.now() - (recentlyLogged.get(jobKey(jobId)) || 0) < 60_000) return;
+      if (jobId) recentlyLogged.set(jobKey(jobId), Date.now());
 
       const scraped = scrapeJob();
       setTimeout(
@@ -405,6 +431,7 @@
 
   function onUrlChange() {
     lastUrl = location.href;
+    S = globalThis.GHOSTED_RESOLVE_SITE(location.hostname);
     pendingApp = null;
     updateFloatingButton();
     scheduleChipUpdate();
@@ -564,7 +591,7 @@
       try {
         context = await chrome.runtime.sendMessage({
           type: "jobContext",
-          jobId,
+          jobId: jobKey(jobId),
           company: scraped.Company,
         });
       } catch {
@@ -585,7 +612,7 @@
       Status: "Applied",
       "Latest word": `Application submitted ${today}`,
       "Follow-up On": U.addDays(today, settings.followUpDays || U.DEFAULT_SETTINGS.followUpDays),
-      "Job URL": jobUrl(jobId),
+      "Job URL": jobUrl(),
       "Job ID": jobId || "",
     };
 
@@ -614,7 +641,7 @@
     title.textContent = external ? "Log external application" : "Log job application";
     const sub = document.createElement("p");
     sub.className = "sub";
-    sub.textContent = jobId ? `Handshake job #${jobId}` : "No job ID detected for this page";
+    sub.textContent = jobId ? `${S.siteName} · ${jobId}` : "No job detected on this page";
     panel.append(title, sub);
 
     const banner = (text, kind, quote) => {
@@ -774,7 +801,7 @@
         const resp = await chrome.runtime.sendMessage({
           type: "logJob",
           row: finalRow,
-          jobId,
+          jobId: jobKey(jobId),
           company: finalRow.Company,
           force: true, // the overlay already showed the dupe warning
         });
