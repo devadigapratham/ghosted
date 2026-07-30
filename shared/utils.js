@@ -371,6 +371,184 @@
   const toCSV = (rows) => toDelimited(rows, ",");
   const toTSV = (rows) => toDelimited(rows, "\t");
 
+  // ── Import ──
+  // RFC 4180-ish reader: handles quoted fields containing the delimiter,
+  // escaped "" quotes, and CRLF or LF line endings.
+  function parseDelimited(text, delimiter) {
+    const rows = [];
+    let row = [];
+    let field = "";
+    let quoted = false;
+    const src = String(text ?? "").replace(/^﻿/, ""); // strip BOM
+
+    const endField = () => { row.push(field); field = ""; };
+    const endRow = () => { endField(); rows.push(row); row = []; };
+
+    for (let i = 0; i < src.length; i++) {
+      const c = src[i];
+
+      if (quoted) {
+        if (c === '"') {
+          if (src[i + 1] === '"') { field += '"'; i++; }
+          else quoted = false;
+        } else field += c;
+        continue;
+      }
+
+      if (c === '"' && field === "") quoted = true;
+      else if (c === delimiter) endField();
+      else if (c === "\n") endRow();
+      else if (c === "\r") { /* handled by the \n that follows */ }
+      else field += c;
+    }
+    // A trailing newline shouldn't produce a phantom row.
+    if (field !== "" || row.length) endRow();
+
+    return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+  }
+
+  // Guess the delimiter from the header line rather than trusting the extension.
+  function sniffDelimiter(text) {
+    const firstLine = String(text ?? "").split(/\r?\n/)[0] || "";
+    const tabs = (firstLine.match(/\t/g) || []).length;
+    const commas = (firstLine.match(/,/g) || []).length;
+    return tabs > commas ? "\t" : ",";
+  }
+
+  // Maps a delimited export back into row objects. Header order doesn't have to
+  // match ours, and unknown columns are ignored — so a sheet someone rearranged
+  // still imports.
+  function rowsFromDelimited(text) {
+    const table = parseDelimited(text, sniffDelimiter(text));
+    if (!table.length) return { rows: [], error: "The file looks empty" };
+
+    const header = table[0].map((h) => h.trim());
+    const known = header.map((h) => COLUMNS.find((c) => c.toLowerCase() === h.toLowerCase()) || null);
+    if (!known.some(Boolean)) {
+      return { rows: [], error: "No recognizable column headers in the first row" };
+    }
+
+    const rows = table.slice(1).map((cells) => {
+      const row = {};
+      for (const col of COLUMNS) row[col] = "";
+      known.forEach((col, i) => { if (col) row[col] = (cells[i] ?? "").trim(); });
+      return row;
+    });
+
+    return { rows: rows.filter((r) => r.Company || r.Position), error: "" };
+  }
+
+  // Also accept a JSON backup (what the export writes) or a bare array.
+  function rowsFromJSON(text) {
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { rows: [], error: "That isn't valid JSON" };
+    }
+    const list = Array.isArray(parsed) ? parsed : parsed?.applications;
+    if (!Array.isArray(list)) return { rows: [], error: "No applications array in that file" };
+
+    const rows = list
+      .filter((r) => r && typeof r === "object")
+      .map((r) => {
+        const row = {};
+        for (const col of COLUMNS) row[col] = String(r[col] ?? "");
+        return row;
+      })
+      .filter((r) => r.Company || r.Position);
+    return { rows, error: "" };
+  }
+
+  function parseImport(text, filename = "") {
+    const looksJSON = /\.json$/i.test(filename) || /^\s*[[{]/.test(String(text ?? ""));
+    return looksJSON ? rowsFromJSON(text) : rowsFromDelimited(text);
+  }
+
+  // Identity for dedupe: the Handshake job id when we have one, otherwise the
+  // company + position + date triple.
+  function identityOf(row) {
+    const id = String(row["Job ID"] || "").trim();
+    if (id) return `job:${id}`;
+    return [
+      String(row.Company || "").trim().toLowerCase(),
+      String(row.Position || "").trim().toLowerCase(),
+      String(row["Date Applied"] || "").trim(),
+    ].join("|");
+  }
+
+  // Adds only what isn't already there. Never edits an existing row, so an
+  // import can't quietly overwrite a status you set by hand.
+  function mergeApplications(existing, incoming) {
+    const seen = new Set((existing || []).map(identityOf));
+    const added = [];
+    let skipped = 0;
+
+    for (const row of incoming || []) {
+      const key = identityOf(row);
+      if (seen.has(key)) { skipped += 1; continue; }
+      seen.add(key);
+      added.push(row);
+    }
+    return { merged: [...(existing || []), ...added], added: added.length, skipped };
+  }
+
+  // ── Weekly goal ──
+  function weekProgress(rows, target, today = todayISO()) {
+    const goal = Math.max(0, Number(target) || 0);
+    const start = addDays(today, -6);
+    const count = (rows || []).filter((r) => {
+      const d = r["Date Applied"];
+      return d && d >= start && d <= today;
+    }).length;
+    return {
+      count,
+      goal,
+      pct: goal ? Math.min(100, Math.round((count / goal) * 100)) : 0,
+      met: goal > 0 && count >= goal,
+    };
+  }
+
+  // ── Needs attention ──
+  // One list answering "what should I do right now", newest urgency first.
+  function needsAttention(rows, settings = DEFAULT_SETTINGS, today = todayISO()) {
+    const ghostAfter = settings.ghostAfterDays ?? DEFAULT_SETTINGS.ghostAfterDays;
+    const items = [];
+
+    for (const row of rows || []) {
+      const status = (row.Status || "").trim();
+      const open = OPEN_STATUSES.has(status) || status === "";
+
+      const deadline = row.Deadline;
+      if (deadline && fromISODate(deadline)) {
+        const left = daysBetween(today, deadline);
+        if (left >= 0 && left <= 7) {
+          items.push({ row, kind: "deadline", urgency: left, label: left === 0 ? "closes today" : `${left}d left` });
+        }
+      }
+
+      if (!open) continue;
+
+      const due = row["Follow-up On"];
+      if (due && daysBetween(due, today) >= 0 && (status === "Applied" || status === "")) {
+        const over = daysBetween(due, today);
+        items.push({ row, kind: "followup", urgency: -over, label: over === 0 ? "follow up today" : `${over}d overdue` });
+      }
+
+      const applied = row["Date Applied"];
+      if (applied && (status === "Applied" || status === "")) {
+        const age = daysBetween(applied, today);
+        if (age >= ghostAfter) {
+          items.push({ row, kind: "stale", urgency: -age, label: `silent ${age}d` });
+        }
+      }
+    }
+
+    // Most urgent first; deadlines outrank nudges at equal urgency.
+    const rank = { deadline: 0, followup: 1, stale: 2 };
+    return items.sort((a, b) => a.urgency - b.urgency || rank[a.kind] - rank[b.kind]);
+  }
+
   // Newest first, which is the order anyone wants to look at these in.
   function sortApplications(apps) {
     return [...(apps || [])].sort((a, b) => {
@@ -457,6 +635,15 @@
     WORK_AUTH_RULES,
     toCSV,
     toTSV,
+    parseDelimited,
+    sniffDelimiter,
+    rowsFromDelimited,
+    rowsFromJSON,
+    parseImport,
+    identityOf,
+    mergeApplications,
+    weekProgress,
+    needsAttention,
     sortApplications,
     columnLetter,
     toISODate,

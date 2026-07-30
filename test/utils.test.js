@@ -809,3 +809,317 @@ test("summarize works on the local log shape, extra keys and all", () => {
   assert.strictEqual(stats.offers, 1);
   assert.strictEqual(stats.thisWeek, 2);
 });
+
+test.describe("parseDelimited", () => {
+  test("splits a simple CSV", () => {
+    assert.deepStrictEqual(U.parseDelimited("a,b\n1,2", ","), [["a", "b"], ["1", "2"]]);
+  });
+
+  test("keeps a quoted comma inside one field", () => {
+    assert.deepStrictEqual(U.parseDelimited('a,b\n"Seattle, WA",x', ","), [["a", "b"], ["Seattle, WA", "x"]]);
+  });
+
+  test("unescapes doubled quotes", () => {
+    assert.deepStrictEqual(U.parseDelimited('a\n"she said ""hi"""', ","), [["a"], ['she said "hi"']]);
+  });
+
+  test("handles CRLF line endings", () => {
+    assert.deepStrictEqual(U.parseDelimited("a,b\r\n1,2\r\n", ","), [["a", "b"], ["1", "2"]]);
+  });
+
+  test("ignores a trailing newline instead of adding a blank row", () => {
+    assert.strictEqual(U.parseDelimited("a,b\n1,2\n", ",").length, 2);
+  });
+
+  test("drops all-blank rows", () => {
+    assert.strictEqual(U.parseDelimited("a,b\n,\n1,2", ",").length, 2);
+  });
+
+  test("strips a UTF-8 BOM from the first header", () => {
+    const table = U.parseDelimited("﻿Position,Company\nSWE,Acme", ",");
+    assert.strictEqual(table[0][0], "Position");
+  });
+
+  test("reads tab-separated input", () => {
+    assert.deepStrictEqual(U.parseDelimited("a\tb\n1\t2", "\t"), [["a", "b"], ["1", "2"]]);
+  });
+
+  test("survives empty input", () => {
+    assert.deepStrictEqual(U.parseDelimited("", ","), []);
+    assert.deepStrictEqual(U.parseDelimited(null, ","), []);
+  });
+});
+
+test.describe("sniffDelimiter", () => {
+  test("picks tab when the header has more tabs", () => {
+    assert.strictEqual(U.sniffDelimiter("a\tb\tc\n1\t2\t3"), "\t");
+  });
+  test("picks comma otherwise", () => {
+    assert.strictEqual(U.sniffDelimiter("a,b,c\n1,2,3"), ",");
+  });
+  test("defaults to comma on junk", () => {
+    assert.strictEqual(U.sniffDelimiter(""), ",");
+  });
+});
+
+test.describe("rowsFromDelimited", () => {
+  const header = U.COLUMNS.join(",");
+
+  test("round-trips what toCSV produced", () => {
+    const original = [
+      { Position: "SWE Intern", Company: "Acme", Status: "Applied", "Date Applied": "2026-07-30",
+        Location: "Seattle, WA", Notes: 'said "hi"', Sponsorship: "No sponsorship", "Job ID": "123" },
+    ];
+    const { rows, error } = U.rowsFromDelimited(U.toCSV(original));
+    assert.strictEqual(error, "");
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].Position, "SWE Intern");
+    assert.strictEqual(rows[0].Location, "Seattle, WA");
+    assert.strictEqual(rows[0].Sponsorship, "No sponsorship");
+    assert.strictEqual(rows[0]["Job ID"], "123");
+  });
+
+  test("round-trips TSV too", () => {
+    const { rows } = U.rowsFromDelimited(U.toTSV([{ Company: "Acme", Position: "SWE" }]));
+    assert.strictEqual(rows[0].Company, "Acme");
+  });
+
+  test("accepts columns in a different order", () => {
+    const { rows, error } = U.rowsFromDelimited("Company,Position\nAcme,SWE");
+    assert.strictEqual(error, "");
+    assert.strictEqual(rows[0].Company, "Acme");
+    assert.strictEqual(rows[0].Position, "SWE");
+  });
+
+  test("is case-insensitive about headers", () => {
+    const { rows } = U.rowsFromDelimited("company,POSITION\nAcme,SWE");
+    assert.strictEqual(rows[0].Company, "Acme");
+  });
+
+  test("ignores unknown columns rather than failing", () => {
+    const { rows, error } = U.rowsFromDelimited("Company,Vibes,Position\nAcme,good,SWE");
+    assert.strictEqual(error, "");
+    assert.strictEqual(rows[0].Company, "Acme");
+    assert.strictEqual(rows[0].Position, "SWE");
+  });
+
+  test("fills missing schema columns with empty strings", () => {
+    const { rows } = U.rowsFromDelimited("Company\nAcme");
+    assert.strictEqual(Object.keys(rows[0]).length, U.COLUMNS.length);
+    assert.strictEqual(rows[0].Status, "");
+  });
+
+  test("errors when no header is recognizable", () => {
+    const { rows, error } = U.rowsFromDelimited("foo,bar\n1,2");
+    assert.strictEqual(rows.length, 0);
+    assert.match(error, /recognizable/i);
+  });
+
+  test("errors on empty input", () => {
+    assert.match(U.rowsFromDelimited("").error, /empty/i);
+  });
+
+  test("drops rows with neither company nor position", () => {
+    const { rows } = U.rowsFromDelimited(`${header}\n` + ",".repeat(U.COLUMNS.length - 1));
+    assert.strictEqual(rows.length, 0);
+  });
+});
+
+test.describe("rowsFromJSON", () => {
+  test("reads a bare array", () => {
+    const { rows, error } = U.rowsFromJSON('[{"Company":"Acme","Position":"SWE"}]');
+    assert.strictEqual(error, "");
+    assert.strictEqual(rows[0].Company, "Acme");
+  });
+
+  test("reads an { applications: [...] } wrapper", () => {
+    const { rows } = U.rowsFromJSON('{"applications":[{"Company":"Acme"}]}');
+    assert.strictEqual(rows.length, 1);
+  });
+
+  test("errors on invalid JSON", () => {
+    assert.match(U.rowsFromJSON("{nope").error, /valid JSON/i);
+  });
+
+  test("errors when there's no array", () => {
+    assert.match(U.rowsFromJSON('{"a":1}').error, /applications array/i);
+  });
+
+  test("coerces every schema field to a string", () => {
+    const { rows } = U.rowsFromJSON('[{"Company":"Acme","Job ID":12345}]');
+    assert.strictEqual(rows[0]["Job ID"], "12345");
+  });
+
+  test("skips non-objects in the array", () => {
+    const { rows } = U.rowsFromJSON('[null,"x",{"Company":"Acme"}]');
+    assert.strictEqual(rows.length, 1);
+  });
+});
+
+test.describe("parseImport", () => {
+  test("routes .json by filename", () => {
+    const { rows } = U.parseImport('[{"Company":"Acme"}]', "backup.json");
+    assert.strictEqual(rows[0].Company, "Acme");
+  });
+
+  test("routes JSON by leading brace even without the extension", () => {
+    const { rows } = U.parseImport('[{"Company":"Acme"}]', "mystery.txt");
+    assert.strictEqual(rows[0].Company, "Acme");
+  });
+
+  test("routes CSV otherwise", () => {
+    const { rows } = U.parseImport("Company,Position\nAcme,SWE", "export.csv");
+    assert.strictEqual(rows[0].Position, "SWE");
+  });
+});
+
+test.describe("identityOf / mergeApplications", () => {
+  test("job id wins as the identity", () => {
+    const a = { "Job ID": "1", Company: "A", Position: "X" };
+    const b = { "Job ID": "1", Company: "B", Position: "Y" };
+    assert.strictEqual(U.identityOf(a), U.identityOf(b));
+  });
+
+  test("falls back to company + position + date", () => {
+    const a = { Company: "Acme", Position: "SWE", "Date Applied": "2026-07-30" };
+    const b = { Company: "acme", Position: "swe", "Date Applied": "2026-07-30" };
+    assert.strictEqual(U.identityOf(a), U.identityOf(b), "should be case-insensitive");
+  });
+
+  test("different dates are different applications", () => {
+    const a = { Company: "Acme", Position: "SWE", "Date Applied": "2026-07-30" };
+    const b = { Company: "Acme", Position: "SWE", "Date Applied": "2026-06-01" };
+    assert.notStrictEqual(U.identityOf(a), U.identityOf(b));
+  });
+
+  test("adds only what's new", () => {
+    const existing = [{ "Job ID": "1", Company: "Acme" }];
+    const incoming = [{ "Job ID": "1", Company: "Acme" }, { "Job ID": "2", Company: "Globex" }];
+    const { merged, added, skipped } = U.mergeApplications(existing, incoming);
+    assert.strictEqual(added, 1);
+    assert.strictEqual(skipped, 1);
+    assert.strictEqual(merged.length, 2);
+  });
+
+  test("never edits an existing row", () => {
+    // An import must not silently overwrite a status set by hand.
+    const existing = [{ "Job ID": "1", Company: "Acme", Status: "Offer" }];
+    const { merged } = U.mergeApplications(existing, [{ "Job ID": "1", Company: "Acme", Status: "Applied" }]);
+    assert.strictEqual(merged.length, 1);
+    assert.strictEqual(merged[0].Status, "Offer");
+  });
+
+  test("dedupes within the incoming batch too", () => {
+    const dup = { "Job ID": "9", Company: "Acme" };
+    const { added, skipped } = U.mergeApplications([], [dup, { ...dup }]);
+    assert.strictEqual(added, 1);
+    assert.strictEqual(skipped, 1);
+  });
+
+  test("handles empty inputs", () => {
+    assert.deepStrictEqual(U.mergeApplications(undefined, undefined), { merged: [], added: 0, skipped: 0 });
+  });
+
+  test("does not mutate the existing array", () => {
+    const existing = [{ "Job ID": "1" }];
+    U.mergeApplications(existing, [{ "Job ID": "2" }]);
+    assert.strictEqual(existing.length, 1);
+  });
+});
+
+test.describe("weekProgress", () => {
+  const TODAY = "2026-07-30";
+  const at = (d) => ({ Company: "A", "Date Applied": d });
+
+  test("counts the trailing 7 days inclusive", () => {
+    const p = U.weekProgress([at("2026-07-30"), at("2026-07-24"), at("2026-07-23")], 5, TODAY);
+    assert.strictEqual(p.count, 2, "07-23 is 7 days back and outside the window");
+  });
+
+  test("reports percent and met", () => {
+    const p = U.weekProgress([at(TODAY), at(TODAY), at(TODAY)], 3, TODAY);
+    assert.strictEqual(p.pct, 100);
+    assert.strictEqual(p.met, true);
+  });
+
+  test("caps percent at 100", () => {
+    const p = U.weekProgress([at(TODAY), at(TODAY), at(TODAY)], 1, TODAY);
+    assert.strictEqual(p.pct, 100);
+  });
+
+  test("a zero or missing goal is never 'met' and never divides by zero", () => {
+    const p = U.weekProgress([at(TODAY)], 0, TODAY);
+    assert.strictEqual(p.pct, 0);
+    assert.strictEqual(p.met, false);
+  });
+
+  test("ignores rows with no date", () => {
+    assert.strictEqual(U.weekProgress([{ Company: "A" }], 5, TODAY).count, 0);
+  });
+});
+
+test.describe("needsAttention", () => {
+  const TODAY = "2026-07-30";
+  const S = { ...U.DEFAULT_SETTINGS, ghostAfterDays: 21 };
+  const row = (over) => ({ Company: "Acme", Position: "SWE", Status: "Applied", ...over });
+
+  test("flags a deadline inside a week", () => {
+    const items = U.needsAttention([row({ Deadline: "2026-08-02" })], S, TODAY);
+    assert.ok(items.some((i) => i.kind === "deadline"));
+  });
+
+  test("ignores a deadline further out than a week", () => {
+    const items = U.needsAttention([row({ Deadline: "2026-09-30" })], S, TODAY);
+    assert.strictEqual(items.filter((i) => i.kind === "deadline").length, 0);
+  });
+
+  test("ignores a deadline that already passed", () => {
+    const items = U.needsAttention([row({ Deadline: "2026-07-01" })], S, TODAY);
+    assert.strictEqual(items.filter((i) => i.kind === "deadline").length, 0);
+  });
+
+  test("flags an overdue follow-up", () => {
+    const items = U.needsAttention([row({ "Follow-up On": "2026-07-25" })], S, TODAY);
+    const f = items.find((i) => i.kind === "followup");
+    assert.ok(f);
+    assert.match(f.label, /overdue/);
+  });
+
+  test("flags silence past the ghost threshold", () => {
+    const items = U.needsAttention([row({ "Date Applied": "2026-06-01" })], S, TODAY);
+    assert.ok(items.some((i) => i.kind === "stale"));
+  });
+
+  test("leaves closed applications alone", () => {
+    const items = U.needsAttention(
+      [row({ Status: "Rejected", "Date Applied": "2026-06-01", "Follow-up On": "2026-07-01" })],
+      S, TODAY
+    );
+    assert.strictEqual(items.filter((i) => i.kind !== "deadline").length, 0);
+  });
+
+  test("still surfaces a closing deadline on a closed application's row only once", () => {
+    const items = U.needsAttention([row({ Status: "Rejected", Deadline: "2026-08-01" })], S, TODAY);
+    assert.strictEqual(items.length, 1);
+    assert.strictEqual(items[0].kind, "deadline");
+  });
+
+  test("sorts most urgent first", () => {
+    const items = U.needsAttention(
+      [
+        row({ Company: "Later", Deadline: "2026-08-05" }),
+        row({ Company: "Sooner", Deadline: "2026-07-31" }),
+      ], S, TODAY
+    );
+    assert.strictEqual(items[0].row.Company, "Sooner");
+  });
+
+  test("returns nothing for a healthy pipeline", () => {
+    assert.strictEqual(U.needsAttention([row({ "Date Applied": TODAY })], S, TODAY).length, 0);
+  });
+
+  test("survives empty input", () => {
+    assert.strictEqual(U.needsAttention([], S, TODAY).length, 0);
+    assert.strictEqual(U.needsAttention(undefined, S, TODAY).length, 0);
+  });
+});
