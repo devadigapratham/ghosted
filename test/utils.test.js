@@ -509,7 +509,6 @@ test.describe("schema growth", () => {
 
   test("LAST_COLUMN matches the schema width", () => {
     assert.strictEqual(U.LAST_COLUMN, U.columnLetter(U.COLUMNS.length - 1));
-    assert.strictEqual(U.LAST_COLUMN, "U");
   });
 
   test("columnLetter handles the A..Z boundary", () => {
@@ -1279,5 +1278,54 @@ test.describe("formatSalary", () => {
     assert.strictEqual(U.formatSalary({}), "");
     assert.strictEqual(U.formatSalary({ value: {} }), "");
     assert.strictEqual(U.formatSalary("$50/hr"), "");
+  });
+});
+
+test.describe("roleKey", () => {
+  test("is board-independent, so the same role matches across sites", () => {
+    // Applying via LinkedIn's "apply on company website" lands on Greenhouse
+    // with a different job id; without this the application logs twice.
+    assert.strictEqual(
+      U.roleKey("Globex", "SWE Intern"),
+      U.roleKey("globex", "swe intern")
+    );
+  });
+
+  test("trims surrounding whitespace", () => {
+    assert.strictEqual(U.roleKey("  Globex ", " SWE Intern "), U.roleKey("Globex", "SWE Intern"));
+  });
+
+  test("different roles at one company stay distinct", () => {
+    assert.notStrictEqual(U.roleKey("Globex", "SWE Intern"), U.roleKey("Globex", "Data Intern"));
+  });
+
+  test("different companies with one role stay distinct", () => {
+    assert.notStrictEqual(U.roleKey("Globex", "SWE Intern"), U.roleKey("Acme", "SWE Intern"));
+  });
+
+  test('returns "" when either half is missing, so it never collides', () => {
+    assert.strictEqual(U.roleKey("", "SWE Intern"), "");
+    assert.strictEqual(U.roleKey("Globex", ""), "");
+    assert.strictEqual(U.roleKey(null, undefined), "");
+  });
+
+  test("is namespaced so it cannot collide with a job key", () => {
+    assert.ok(U.roleKey("a", "b").startsWith("role:"));
+  });
+});
+
+test.describe("Source column", () => {
+  test("is the last column", () => {
+    assert.strictEqual(U.COLUMNS[U.COLUMNS.length - 1], "Source");
+    assert.strictEqual(U.LAST_COLUMN, "V");
+  });
+
+  test("was appended, so older sheets still line up", () => {
+    assert.deepStrictEqual(U.COLUMNS.slice(0, 15), U.CORE_COLUMNS);
+  });
+
+  test("round-trips through export and import", () => {
+    const { rows } = U.rowsFromDelimited(U.toCSV([{ Company: "Acme", Position: "SWE", Source: "LinkedIn" }]));
+    assert.strictEqual(rows[0].Source, "LinkedIn");
   });
 });

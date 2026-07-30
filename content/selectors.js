@@ -94,7 +94,19 @@ globalThis.GHOSTED_SELECTORS = {
   // $25-30/hr, $90k–$110k, $25.50 per hour
   salaryTextPattern: /\$\s?[\d,.]+\s?k?(\s?[-–—]\s?\$?\s?[\d,.]+\s?k?)?\s*(\/|per\s)?\s*(hr|hour|yr|year|mo|month|week|wk)?/i,
 
-  successText: /(application\s+(was\s+)?(submitted|received|complete)|successfully\s+(applied|submitted)|you('|’)ve\s+applied|application\s+received|thanks?\s+(you\s+)?for\s+(applying|your\s+(application|interest))|we('|’)ve\s+received\s+your\s+application|your\s+application\s+(has\s+been\s+)?(sent|submitted|received))/i,
+  // How each platform words a successful submission. The connector varies
+  // ("was sent", "has been submitted", bare "sent"), and \b stops "sent" from
+  // matching inside "sentiment".
+  successText: new RegExp(
+    [
+      "application\\s+(was\\s+|has\\s+been\\s+)?(sent|submitted|received|complete)\\b",
+      "successfully\\s+(applied|submitted|sent)\\b",
+      "you('|\u2019)ve\\s+applied\\b",
+      "thanks?\\s+(you\\s+)?for\\s+(applying|your\\s+(application|interest))\\b",
+      "we\\s*('|\u2019)?(ve|have)\\s+received\\s+your\\s+application\\b",
+    ].join("|"),
+    "i"
+  ),
 
   appliedButton: /^applied\s*(✓)?$/i,
 
@@ -227,7 +239,11 @@ globalThis.GHOSTED_SITES = [
 globalThis.GHOSTED_RESOLVE_SITE = function resolveSite(hostname) {
   const base = globalThis.GHOSTED_SELECTORS;
   const site = globalThis.GHOSTED_SITES.find((s) => s.host.test(String(hostname || "")));
-  if (!site) return { ...base, siteId: "generic", siteName: "this page" };
+  // An unrecognized host still gets a usable label for the Source column.
+  if (!site) {
+    const host = String(hostname || "").replace(/^www\./i, "");
+    return { ...base, siteId: "generic", siteName: host || "this page" };
+  }
 
   const merged = { ...base, siteId: site.id, siteName: site.name };
   for (const [key, value] of Object.entries(site)) {

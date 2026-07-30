@@ -36,6 +36,12 @@ test.describe("host matching", () => {
     assert.strictEqual(resolve(undefined).siteId, "generic");
   });
 
+  test("an unknown host still gets a usable name for the Source column", () => {
+    assert.strictEqual(resolve("careers.example.com").siteName, "careers.example.com");
+    assert.strictEqual(resolve("www.example.com").siteName, "example.com");
+    assert.strictEqual(resolve("").siteName, "this page");
+  });
+
   test("a lookalike domain does not match", () => {
     // notlinkedin.com must not be treated as LinkedIn.
     assert.strictEqual(resolve("notlinkedin.com").siteId, "generic");
@@ -140,10 +146,16 @@ test.describe("success text covers the common confirmations", () => {
     "Thank you for applying",
     "Thanks for your application",
     "We've received your application",
+    "We have received your application",
     "Your application was received",
     "Application received",
+    "Application complete",
     "You've applied",
     "Successfully applied",
+    // LinkedIn Easy Apply, which the earlier pattern missed: it allowed
+    // "has been" but not "was", and not a bare "sent".
+    "Your application was sent to Globex",
+    "Application sent",
   ];
   for (const phrase of phrases) {
     test(JSON.stringify(phrase), () => assert.ok(BASE.successText.test(phrase)));
@@ -155,6 +167,10 @@ test.describe("success text covers the common confirmations", () => {
       "Applications are reviewed weekly",
       "Apply now",
       "3 applicants",
+      "Applications received: 47",
+      "Your application will be reviewed",
+      "Complete your application",
+      "Application sentiment analysis",
     ]) {
       assert.ok(!BASE.successText.test(noise), `false positive on ${JSON.stringify(noise)}`);
     }

@@ -28,6 +28,9 @@
     "Follow-up On",
     "Job URL",
     "Job ID",
+    // Which board the application went through, so a sheet spanning LinkedIn,
+    // Greenhouse and Handshake stays legible.
+    "Source",
   ];
 
   const COLUMNS = [...CORE_COLUMNS, ...EXTRA_COLUMNS];
@@ -74,7 +77,9 @@
   };
 
   const DEDUPE_MAX_AGE_DAYS = 365;
-  const DEDUPE_MAX_ENTRIES = 750;
+  // Holds both per-board job keys and company+role keys, so it needs headroom
+  // for roughly two entries per application.
+  const DEDUPE_MAX_ENTRIES = 4000;
 
   // Local log cap. A row is well under 1KB, so this stays far inside the
   // storage.local quota while being more applications than anyone sends.
@@ -617,6 +622,16 @@
     });
   }
 
+  // A board-independent key for the same opening. Applying through LinkedIn's
+  // "apply on company website" lands you on Greenhouse or Workday, where the
+  // job id is different, so the job id alone would log the application twice.
+  function roleKey(company, position) {
+    const c = String(company || "").trim().toLowerCase();
+    const p = String(position || "").trim().toLowerCase();
+    if (!c || !p) return "";
+    return `role:${c}|${p}`;
+  }
+
   // Drops entries past DEDUPE_MAX_AGE_DAYS, then trims oldest-first if still
   // over the cap. Returns a new object.
   function pruneLoggedJobs(logged, today = todayISO()) {
@@ -726,6 +741,7 @@
     safeHttpUrl,
     sheetUrl,
     pruneLoggedJobs,
+    roleKey,
     summarize,
   };
 })();

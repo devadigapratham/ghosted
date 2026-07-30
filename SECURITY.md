@@ -56,6 +56,7 @@ cannot enumerate or read any other file.
 | `notifications` | The follow-up reminder. |
 | `contextMenus` | Right-click to log a job. |
 | `activeTab` | Lets the popup read the current tab's URL, only when you click the icon. |
+| `scripting` | Injects the content script into the current tab when you press "Log this job" on a site the manifest does not match. Scoped by `activeTab`, so it only ever reaches the one tab you invoked it on, and only on that click. |
 | `host_permissions: sheets.googleapis.com` | The only network destination. |
 | `content_scripts.matches` | The job boards listed in the README. The content script reads those pages to find job details; it does not modify them beyond its own button and overlay, and does not run anywhere else. |
 

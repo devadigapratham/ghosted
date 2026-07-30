@@ -55,7 +55,8 @@ $("logBtn").addEventListener("click", async () => {
 
   // tab.url is only readable because of the activeTab permission, which Chrome
   // grants for this tab the moment the user clicks the toolbar icon.
-  if (!tab?.id || !JOB_SITE.test(tab.url || "")) {
+  const url = tab?.url || "";
+  if (!tab?.id || !/^https?:/i.test(url)) {
     $("logBtn").textContent = "Open a job posting first";
     return;
   }
@@ -63,9 +64,24 @@ $("logBtn").addEventListener("click", async () => {
   try {
     await chrome.tabs.sendMessage(tab.id, { type: "openLogOverlay" });
     window.close();
+    return;
   } catch {
-    // No content script listening; the tab predates the last extension reload.
-    $("logBtn").textContent = "Reload the Handshake tab first";
+    // Nothing listening. Either the tab predates the last extension reload, or
+    // this is a site the manifest does not match. activeTab lets us inject on
+    // demand, which is what makes logging work on any careers page.
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["shared/utils.js", "content/selectors.js", "content/content.js"],
+    });
+    await chrome.tabs.sendMessage(tab.id, { type: "openLogOverlay" });
+    window.close();
+  } catch (e) {
+    $("logBtn").textContent = JOB_SITE.test(url)
+      ? "Reload the page and try again"
+      : "Can't read this page";
   }
 });
 

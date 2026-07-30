@@ -17,7 +17,8 @@
     "contextMenus",
     "alarms",
     "activeTab",
-    "notifications"
+    "notifications",
+    "scripting"
   ],
   "commands": {
     "log-job": {

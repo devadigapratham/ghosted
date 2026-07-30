@@ -2,6 +2,9 @@
 // overlay. Sends the finished row to the worker; does no network work itself.
 (() => {
   if (window.top !== window) return;
+  // The popup can inject this script into any tab, so it may already be here.
+  if (globalThis.__ghostedLoaded) return;
+  globalThis.__ghostedLoaded = true;
 
   // Selectors for whichever board this is, merged over the shared baseline.
   let S = globalThis.GHOSTED_RESOLVE_SITE(location.hostname);
@@ -592,6 +595,7 @@
           type: "jobContext",
           jobId: jobKey(jobId),
           company: scraped.Company,
+          position: scraped.Position,
         });
       } catch {
         // Worker asleep or reloading; carry on without dupe/company info.
@@ -613,6 +617,7 @@
       "Follow-up On": U.addDays(today, settings.followUpDays || U.DEFAULT_SETTINGS.followUpDays),
       "Job URL": jobUrl(),
       "Job ID": jobId || "",
+      Source: S.siteName,
     };
 
     openOverlay({
@@ -657,7 +662,11 @@
     };
 
     if (duplicate) {
-      banner(`⚠ You already logged this job on ${duplicate.date}. Saving will append a duplicate row.`);
+      banner(
+        duplicate.via === "role"
+          ? `⚠ You already logged ${row.Company || "this role"} · ${row.Position || ""} on ${duplicate.date}, from a different site. Saving will append a second row.`.replace(" · ", row.Position ? " · " : "")
+          : `⚠ You already logged this job on ${duplicate.date}. Saving will append a duplicate row.`
+      );
     }
 
     // The reason this extension exists, for anyone who needs a visa.
@@ -702,6 +711,7 @@
       { key: "Résumé upload?", type: "select", options: yesNo },
       { key: "Résumé Form?", type: "select", options: yesNo },
       { key: "Salary Range", type: "text" },
+      { key: "Source", type: "text" },
       { key: "Status", type: "select", options: U.STATUS_OPTIONS },
       { key: "Notes", type: "textarea", wide: true },
       { key: "Latest word", type: "text", wide: true },

@@ -297,10 +297,17 @@ async function writeSheetCell(rowNumber, column, value) {
   return { ok: true };
 }
 
-async function checkDuplicate(jobId) {
-  if (!jobId) return { duplicate: false };
+// Checks the board's own job id first, then the board-independent company+role
+// key, which catches the same application arriving via a second site.
+async function checkDuplicate(jobId, company, position) {
   const logged = await getLocal("loggedJobs", {});
-  return logged[jobId] ? { duplicate: true, date: logged[jobId] } : { duplicate: false };
+
+  if (jobId && logged[jobId]) return { duplicate: true, date: logged[jobId], via: "job" };
+
+  const role = U.roleKey(company, position);
+  if (role && logged[role]) return { duplicate: true, date: logged[role], via: "role" };
+
+  return { duplicate: false };
 }
 
 const companyKey = (company) => String(company || "").trim().toLowerCase();
@@ -312,10 +319,13 @@ async function companyCount(company) {
   return counts[key] || 0;
 }
 
-async function recordLogged(jobId, company) {
-  if (jobId) {
+async function recordLogged(jobId, company, position) {
+  const role = U.roleKey(company, position);
+  if (jobId || role) {
     const logged = await getLocal("loggedJobs", {});
-    logged[jobId] = U.todayISO();
+    const today = U.todayISO();
+    if (jobId) logged[jobId] = today;
+    if (role) logged[role] = today;
     await chrome.storage.local.set({ loggedJobs: U.pruneLoggedJobs(logged) });
   }
 
@@ -457,19 +467,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   (async () => {
     switch (msg?.type) {
       case "jobContext": {
-        const dup = await checkDuplicate(msg.jobId);
+        const dup = await checkDuplicate(msg.jobId, msg.company, msg.position);
         return { ...dup, companyCount: await companyCount(msg.company) };
       }
 
       case "logJob": {
         if (!msg.force) {
-          const dup = await checkDuplicate(msg.jobId);
-          if (dup.duplicate) return { ok: false, duplicate: true, date: dup.date };
+          const dup = await checkDuplicate(msg.jobId, msg.company, msg.row?.Position);
+          if (dup.duplicate) return { ok: false, duplicate: true, date: dup.date, via: dup.via };
         }
 
         // Local first, always. Everything after this is a bonus.
         const localId = await saveApplication(msg.row);
-        await recordLogged(msg.jobId, msg.company);
+        await recordLogged(msg.jobId, msg.company, msg.row?.Position);
 
         const settings = await getSettings();
         if (!settings.spreadsheetId) return { ok: true, savedLocally: true };

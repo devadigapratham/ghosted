@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-345%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-359%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to, so you know exactly who ghosted you.
@@ -175,9 +175,9 @@ list of postings has actual dates on it.
 
 ## The columns
 
-One row per application, 21 fields:
+One row per application, 22 fields:
 
-`Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word | Job Type | Sponsorship | Deadline | Follow-up On | Job URL | Job ID`
+`Position | Company | Industry | Role | Location | Date Posted | Date Applied | Connections? | Cover Letter | Résumé upload? | Résumé Form? | Salary Range | Notes | Status | Latest word | Job Type | Sponsorship | Deadline | Follow-up On | Job URL | Job ID | Source`
 
 These are the CSV/TSV export headers, and the sheet header row if you connect
 one.
@@ -398,6 +398,35 @@ selectors would. Per-board selectors fill in what structured data omits.
 Boards other than Handshake are newer and less exercised. If a field comes back
 blank, the overlay flags it amber and you type it in; nothing breaks.
 
+The **Source** column records which board each application came through, so a
+sheet spanning LinkedIn, Greenhouse and Handshake stays readable.
+
+### Anywhere else
+
+Auto-capture only runs on the boards above, because a content script has to be
+declared for a site in advance. But **logging works on any careers page**: open
+the posting and click **＋ Log this job** in the toolbar popup (or
+⌘/Ctrl+Shift+L). The extension injects itself into that one tab on demand, using
+`activeTab`, which Chrome grants only for the tab you invoked it on. It reads
+`application/ld+json` JobPosting data if the page has it, falls back to generic
+heuristics, and Source records the hostname.
+
+That is the deliberate trade: broad standing permission on every site would be
+worse for your privacy than a button you press.
+
+### Applying through LinkedIn
+
+Most LinkedIn postings are **"Apply on company website"**, which sends you to
+Greenhouse, Lever or Workday. Ghosted logs on the click, and the destination
+would normally log again with a different job id. To stop that becoming two rows,
+duplicates are also matched on company + role, independent of board, and the
+overlay says so:
+
+> ⚠ You already logged Globex · SWE Intern on 2026-07-28, from a different site.
+
+LinkedIn's own Easy Apply confirmation ("Your application was sent to …") is
+detected too.
+
 ### Adding a board
 
 Append an entry to `GHOSTED_SITES` in `content/selectors.js` with a `host` regex
@@ -460,7 +489,7 @@ npm test
 ```
 
 ```sh
-npm test           # 295 unit tests, no dependencies, no browser
+npm test           # 309 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
