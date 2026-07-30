@@ -315,6 +315,29 @@
     return status === "No sponsorship" || status === "Citizens/PR only";
   }
 
+  // schema.org puts unitText on the QuantitativeValue inside baseSalary.value,
+  // not on baseSalary itself, and value may be a bare number. Handles all three
+  // shapes publishers actually emit.
+  function formatSalary(baseSalary) {
+    if (!baseSalary || typeof baseSalary !== "object") return "";
+    const value = baseSalary.value;
+
+    const unitOf = (obj) => {
+      const raw = (obj && obj.unitText) || baseSalary.unitText || "";
+      return raw ? `/${String(raw).toLowerCase()}` : "";
+    };
+
+    if (typeof value === "number") return `$${value}${unitOf(null)}`;
+    if (!value || typeof value !== "object") return "";
+
+    const unit = unitOf(value);
+    if (value.minValue != null && value.maxValue != null) {
+      return `$${value.minValue}–$${value.maxValue}${unit}`;
+    }
+    if (value.value != null) return `$${value.value}${unit}`;
+    return "";
+  }
+
   function normalizeJobType(text) {
     const t = String(text || "").toLowerCase();
     if (!t) return "";
@@ -695,6 +718,7 @@
     descriptionWindow,
     isSponsorshipBlocker,
     normalizeJobType,
+    formatSalary,
     sanitizeCell,
     rowToValues,
     valuesToRow,

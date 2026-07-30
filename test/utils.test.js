@@ -1239,3 +1239,45 @@ test.describe("descriptionWindow", () => {
     assert.strictEqual(U.descriptionWindow(undefined), "");
   });
 });
+
+test.describe("formatSalary", () => {
+  test("reads unitText from the QuantitativeValue, where schema.org puts it", () => {
+    // Regression: the unit was read off baseSalary, one level too high, so every
+    // hourly range rendered without "/hour".
+    assert.strictEqual(
+      U.formatSalary({ currency: "USD", value: { minValue: 45, maxValue: 58, unitText: "HOUR" } }),
+      "$45–$58/hour"
+    );
+  });
+
+  test("still reads unitText from baseSalary when a publisher puts it there", () => {
+    assert.strictEqual(
+      U.formatSalary({ unitText: "YEAR", value: { minValue: 90000, maxValue: 120000 } }),
+      "$90000–$120000/year"
+    );
+  });
+
+  test("handles a single value", () => {
+    assert.strictEqual(U.formatSalary({ value: { value: 50, unitText: "HOUR" } }), "$50/hour");
+  });
+
+  test("handles value as a bare number", () => {
+    assert.strictEqual(U.formatSalary({ value: 85000, unitText: "YEAR" }), "$85000/year");
+  });
+
+  test("omits the unit when none is given", () => {
+    assert.strictEqual(U.formatSalary({ value: { minValue: 20, maxValue: 30 } }), "$20–$30");
+  });
+
+  test("handles a zero minimum without dropping it", () => {
+    assert.strictEqual(U.formatSalary({ value: { minValue: 0, maxValue: 30 } }), "$0–$30");
+  });
+
+  test("returns \"\" for missing or malformed input", () => {
+    assert.strictEqual(U.formatSalary(undefined), "");
+    assert.strictEqual(U.formatSalary(null), "");
+    assert.strictEqual(U.formatSalary({}), "");
+    assert.strictEqual(U.formatSalary({ value: {} }), "");
+    assert.strictEqual(U.formatSalary("$50/hr"), "");
+  });
+});

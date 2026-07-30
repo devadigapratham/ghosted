@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Manifest V3](https://img.shields.io/badge/chrome-manifest%20v3-1b7f4d)
-![Tests](https://img.shields.io/badge/tests-338%20passing-1b7f4d)
+![Tests](https://img.shields.io/badge/tests-345%20passing-1b7f4d)
 ![No dependencies](https://img.shields.io/badge/dependencies-none-1b7f4d)
 
 Logs every job you apply to, so you know exactly who ghosted you.
@@ -22,27 +22,91 @@ available if you want it, and optional.
 
 ## Quick start
 
-1. `chrome://extensions` → turn on **Developer mode** (top right) → **Load
-   unpacked** → pick this folder.
-2. Go apply to a job.
-3. Click the ghost in the toolbar → **Open dashboard**.
+Nothing to install beyond the browser, and no account.
+
+```sh
+git clone https://github.com/devadigapratham/ghosted.git
+```
+
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (toggle, top right).
+3. Click **Load unpacked** and select the `ghosted` folder you just cloned.
+4. Click the ghost icon in the toolbar → **Open dashboard**.
+5. Go apply to a job on any [supported board](#supported-job-boards).
 
 That's it. Applications are saved on your own machine. No Google account, no API
-keys, nothing to configure.
+keys, nothing to configure. Works in any Chromium browser: Chrome, Edge, Brave,
+Arc, Opera.
 
-Connect a Google Sheet later if you want your applications mirrored somewhere
-you can share and chart them — see [below](#optional-google-sheets-sync). Also
-free.
+Worth thirty seconds in the dashboard's **Settings** tab: if you need visa
+sponsorship leave that toggle on, since it drives the pre-apply warnings. Set
+your Role dropdown options and how many days of silence counts as ghosted.
 
-Worth thirty seconds in **⚙ Options** either way: if you need visa sponsorship
-leave that toggle on (it drives the pre-apply warnings), set your Role
-dropdown options, and pick how many days of silence counts as ghosted.
+Optional extras, in the order most people want them:
+
+- [Import an existing spreadsheet](#import-and-export) if you were already
+  tracking by hand.
+- [Connect a Google Sheet](#optional-google-sheets-sync) to mirror everything
+  somewhere shareable. Free, five minutes.
+- [Host the dashboard](#the-hosted-dashboard) so you can read your data on a
+  machine without the extension.
+
+### Keeping it up to date
+
+An unpacked extension does not auto-update. To pull changes:
+
+```sh
+git pull
+```
+
+Then hit the reload (↻) icon on the card at `chrome://extensions`. Your data
+lives in browser storage, not in the folder, so updating never touches it.
+
+## How it works
+
+```mermaid
+flowchart TD
+    A[You open a job posting] --> B{Sponsorship badge}
+    B -->|No sponsorship| C[Skip it, before writing a cover letter]
+    B -->|Sponsors / unclear| D[You apply]
+    D --> E[Ghosted detects the submission]
+    E --> F[Confirmation box, pre-filled]
+    F -->|Enter| G[(Saved on your machine)]
+    G --> H[Dashboard: charts, pipeline, deadlines]
+    G -.->|optional| I[(Your Google Sheet)]
+```
+
+Everything left of the dashed line happens in your browser. The Google Sheet is
+optional and is the only thing that ever leaves your machine.
+
+## Walkthrough
+
+**1. Before you apply, it tells you whether the employer sponsors.** The badge
+sits next to the log button. Click it to see the exact sentence it matched.
+
+![The sponsorship badge on a job posting](docs/sponsorship-badge.jpg)
+
+**2. Apply, and the confirmation box appears pre-filled.** Position, company,
+industry, location, salary, posted date, deadline and sponsorship are all read
+off the page. You fill in the two or three things it can't know, then press
+Enter. Anything it couldn't find is highlighted amber instead of guessed.
+
+![The confirmation overlay, pre-filled, with a sponsorship warning](docs/confirm-overlay.jpg)
+
+**3. Move things along as you hear back.** Drop-downs on every card, and the
+change writes straight back to wherever your data lives.
+
+![The pipeline board](docs/pipeline.jpg)
+
+**4. It tells you what needs doing.** Closing deadlines, overdue follow-ups and
+applications that have gone quiet, most urgent first.
+
+![The needs-attention list](docs/needs-attention.jpg)
 
 ## The dashboard
 
-The dashboard is the tool; the browser extension is just the part that captures
-jobs. Open it from the toolbar popup, or right-click the extension icon →
-Options. It runs in its own tab, and it reads whichever copy of your data is
+The dashboard is the tool; the extension is just the part that captures jobs.
+Open it from the toolbar popup, or right-click the extension icon → Options. It runs in its own tab, and it reads whichever copy of your data is
 authoritative — the sheet if you've connected one, otherwise the local log.
 
 - **Dashboard** — headline numbers (applied, this week, interviews, ghosted, and
@@ -68,8 +132,8 @@ Light and dark themes with a toggle. Press <kbd>?</kbd> for keyboard shortcuts
 **Tells you about sponsorship before you apply.** If you need a visa, whether
 the employer sponsors is the first thing that matters and it is usually buried in
 boilerplate at the bottom of the posting. Ghosted reads the description and puts
-a badge on the job page: *Sponsors visas*, *No
-sponsorship*, *Citizens/PR only*, or *Sponsorship unclear*. Click the badge and
+a badge on the job page: *Sponsors visas*, *No sponsorship*, *Citizens/PR only*,
+or *Sponsorship unclear*. Click the badge and
 it shows you the exact sentence it matched, so you can judge for yourself. The
 answer also lands in the sheet, so you can filter by it later.
 
@@ -130,18 +194,33 @@ The dashboard also runs as a plain web page, with no install:
 npm run serve      # then open http://localhost:8731/
 ```
 
-Or deploy it. `vercel.json` serves the repo root and rewrites `/` to the landing
-page and `/app` to the dashboard:
+Or deploy it. `vercel.json` serves the repo root, rewriting `/` to the landing
+page and `/app` to the dashboard. There is no build step and no server.
 
 ```sh
-npx vercel deploy --prod
+npm i -g vercel
+vercel login
+vercel --prod
 ```
+
+Deploying from the Vercel dashboard instead: import the GitHub repo and pick
+**Framework Preset: Other**, leaving the build command and output directory
+blank. There is nothing to compile.
+
+**What hosting does and doesn't give you.** The hosted page is the dashboard
+only: reading, editing, filtering and exporting. It cannot capture applications
+or scan postings for sponsorship, because those need code running on the job page,
+which only the extension can do. A fresh deploy starts empty; export a CSV from
+the extension and import it.
+
+Data stays in the visitor's own browser. Nothing is uploaded, so two people
+visiting the same deployment never see each other's applications.
 
 The hosted build reads a copy kept in that browser's `localStorage`, so export a
 CSV from the extension and import it to browse your data on a machine without the
 extension. Capture, sponsorship scanning, reminders and Sheets sync need the
-extension — they have to run in the browser on the Handshake page — and the
-settings that depend on them are hidden automatically.
+extension, because they have to run inside the browser on the job page itself.
+The settings that depend on them hide themselves automatically.
 
 The same `app/app.html`, `app/app.js` and `shared/utils.js` serve both. The only
 difference is `app/data-source.js`, which picks a storage backend based on
@@ -362,7 +441,7 @@ npm test
 ```
 
 ```sh
-npm test           # 288 unit tests, no dependencies, no browser
+npm test           # 295 unit tests, no dependencies, no browser
 npm run serve      # then open http://localhost:8731/test/browser.html
 ```
 
@@ -428,6 +507,79 @@ each permission is requested, and known limitations.
   as `http`/`https`, so a shared export cannot smuggle in a `javascript:` link.
 - Scraped text is trimmed, and a leading `=` `+` `-` `@` gets an apostrophe
   before it's written, so a job title can't inject a formula into your sheet.
+
+## FAQ
+
+**Does it cost anything?**
+No. There is no server, no subscription and no paid tier. The Google Sheets API
+is free and needs no billing account. The only money Google asks for anywhere
+near this is a one-off $5 if you ever publish an extension to the Web Store,
+which you don't need to do to use this.
+
+**Do I need a Google account?**
+No. That's only for the optional Sheets mirror. Without it everything is stored
+in your browser.
+
+**Where is my data?**
+In your browser profile, on your machine. There is no account and no server to
+leak it. If you connect a sheet, a copy also lives in your own Google Drive.
+Nothing is sent anywhere else, ever. See [SECURITY.md](SECURITY.md).
+
+**Can my school, my university or an employer see this?**
+No. Ghosted reads job pages; it never writes to them and never announces itself.
+Nothing is transmitted to Handshake, LinkedIn or an employer.
+
+**Will it still work after I graduate?**
+Yes. It covers Greenhouse, Lever, Ashby, Workday, LinkedIn, Indeed,
+SmartRecruiters and Workable as well as Handshake, and those are where most
+applications actually happen.
+
+**Why does it need Developer mode? Is that safe?**
+Developer mode is how Chrome loads an extension from a folder instead of the Web
+Store. It's the normal way to run an unpublished extension. The whole source is
+in this repo, which is more than you can say for most things you install. Chrome
+will show a "disable developer mode extensions" prompt now and then; dismissing
+it is fine.
+
+**Does it update automatically?**
+No, an unpacked extension doesn't. `git pull`, then hit reload (↻) on the card
+at `chrome://extensions`. Your data isn't in the folder, so updating never
+touches it.
+
+**Can I use it on two computers?**
+Yes, two ways. Export a CSV and import it on the other machine, or connect the
+same Google Sheet on both, which keeps them in step automatically.
+
+**The floating button isn't appearing.**
+Reload the job page: content scripts only attach to pages opened after the
+extension loaded. If it still doesn't, the page may not look like a job posting
+to it — use the toolbar popup or ⌘/Ctrl+Shift+L, which work anywhere.
+
+**Sponsorship says "unclear" but the posting clearly mentions visas.**
+"Unclear" means no phrasing it recognizes was found; it deliberately never
+guesses. Copy the sentence from the posting into a new case in
+`test/utils.test.js` and add the phrasing to `WORK_AUTH_RULES` in
+`shared/utils.js`.
+
+**Sponsorship is wrong.**
+Treat it as a hint, never as legal advice; always confirm with the recruiter. If
+you found a false positive or negative, the same two files are where to fix it,
+and a test alongside it stops it regressing.
+
+**A field came back blank.**
+That board's selectors need updating. `content/selectors.js` is the only file
+involved. Right-click the value → Inspect, find a stable attribute, and add it
+to the front of the relevant list.
+
+**Does it work in Firefox or Safari?**
+Not as-is. It's Manifest V3, so any Chromium browser works: Chrome, Edge, Brave,
+Arc, Opera. Firefox needs a manifest shim; Safari needs a different packaging
+route.
+
+**How do I delete everything?**
+Dashboard → Settings → **Delete all local applications** (two clicks, on
+purpose). Removing the extension at `chrome://extensions` also drops its
+storage. If you connected a sheet, delete that separately; it's yours.
 
 ## Any university
 

@@ -8,17 +8,6 @@
   const U = globalThis.GHOSTED;
 
   let settings = { ...U.DEFAULT_SETTINGS };
-  chrome.storage.sync.get(U.DEFAULT_SETTINGS, (s) => {
-    settings = s;
-    updateFloatingButton();
-    scheduleChipUpdate();
-  });
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "sync") return;
-    for (const [k, { newValue }] of Object.entries(changes)) settings[k] = newValue;
-    chipCache.clear();
-    scheduleChipUpdate();
-  });
 
   // Filled in when the apply modal opens, consumed when submission succeeds.
   // Scraping has to happen up front; by the time the success toast appears,
@@ -203,12 +192,7 @@
       if (jp.jobLocationType === "TELECOMMUTE") locs.push("Remote");
       fields.Location = locs.join("; ");
 
-      const sal = jp.baseSalary?.value;
-      if (sal) {
-        const unit = jp.baseSalary.unitText ? `/${String(jp.baseSalary.unitText).toLowerCase()}` : "";
-        if (sal.minValue && sal.maxValue) fields["Salary Range"] = `$${sal.minValue}–$${sal.maxValue}${unit}`;
-        else if (sal.value) fields["Salary Range"] = `$${sal.value}${unit}`;
-      }
+      fields["Salary Range"] = U.formatSalary(jp.baseSalary);
     }
 
     if (!fields.Position) fields.Position = queryText(S.css.title);
@@ -559,6 +543,21 @@
     mountHost();
     fab.style.display = getJobId() ? "block" : "none";
   }
+
+  // Settings load last: it repaints the button and chip, which have to exist
+  // first. Reading it earlier only worked because the callback is async.
+  chrome.storage.sync.get(U.DEFAULT_SETTINGS, (loaded) => {
+    settings = loaded;
+    updateFloatingButton();
+    scheduleChipUpdate();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync") return;
+    for (const [k, { newValue }] of Object.entries(changes)) settings[k] = newValue;
+    chipCache.clear();
+    scheduleChipUpdate();
+  });
+
   updateFloatingButton();
   scheduleChipUpdate();
 
