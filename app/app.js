@@ -54,8 +54,12 @@ async function load() {
 
   const badge = $("sourceBadge");
   if (resp?.stale) badge.textContent = "sheet unreachable · showing local copy";
+  else if (DS.demo) badge.textContent = "demo data";
   else if (DS.env === "web") badge.textContent = "stored in this browser";
   else badge.textContent = source === "sheet" ? "synced with your sheet" : "stored on this machine";
+
+  $("demoBanner").hidden = !DS.demo;
+  $("importBtn").hidden = Boolean(DS.demo);
 
   renderAll();
 }

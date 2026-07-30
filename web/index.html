@@ -74,19 +74,20 @@
       <h1>Ghosted</h1>
     </div>
     <p class="tag">
-      Logs every job you apply to on Handshake, so you know exactly who ghosted you.
+      Logs every job you apply to on Handshake, Greenhouse, Lever, Workday,
+      LinkedIn and more, so you know exactly who ghosted you.
     </p>
 
     <div class="cta">
       <a class="btn primary" href="https://github.com/devadigapratham/ghosted">Get it on GitHub</a>
-      <a class="btn" href="/app">Open the dashboard</a>
+      <a class="btn" href="/app?demo=1">Try the live demo</a>
     </div>
 
     <img class="shot" src="/docs/dashboard-dark.jpg" alt="The Ghosted dashboard showing application counts, a per-week chart, and a sponsorship breakdown">
 
     <h2>What it does</h2>
     <ul>
-      <li><strong>Logs applications automatically.</strong> Apply on Handshake and a
+      <li><strong>Logs applications automatically.</strong> Apply to something and a
         confirmation box appears pre-filled. Press Enter and it's recorded.</li>
       <li><strong>Flags sponsorship before you apply.</strong> It reads the job
         description and badges the page: sponsors, no sponsorship, citizens/PR only,
@@ -105,28 +106,38 @@
       Google account.
     </p>
 
-    <h2>The hosted dashboard</h2>
+    <h2>Try it without installing</h2>
     <p>
-      <a href="/app">The dashboard</a> also runs here, with no install. It reads a
-      copy kept in this browser, so export a CSV from the extension and import it to
-      browse your data on a machine that doesn't have the extension.
+      <a href="/app?demo=1">The live demo</a> is the real dashboard running on sample
+      data. Click around: filter the table, move something along the pipeline, flip
+      the theme. Nothing is saved and none of it is anyone's real data.
+    </p>
+    <p>
+      <a href="/app">The same dashboard without <code>?demo=1</code></a> reads a copy
+      kept in your own browser, so you can export a CSV from the extension and import
+      it here to read your data on a machine that has no extension.
     </p>
     <div class="note warn">
       Capture, sponsorship scanning, reminders and Sheets sync need the extension —
-      they have to run inside the browser on the Handshake page. The hosted version is
-      for reading and editing what you already collected.
+      they have to run inside the browser on the job page itself. The hosted version
+      is for reading and editing what you already collected.
     </div>
 
     <h2>Install</h2>
+    <p>No terminal, no Node, no npm. About a minute.</p>
     <ol>
-      <li>Clone or download <a href="https://github.com/devadigapratham/ghosted">the repo</a>.</li>
-      <li>Open <code>chrome://extensions</code>, turn on Developer mode.</li>
-      <li><strong>Load unpacked</strong>, pick the folder.</li>
-      <li>Apply to a job.</li>
+      <li>On <a href="https://github.com/devadigapratham/ghosted">the repo</a>, click
+        the green <strong>Code</strong> button → <strong>Download ZIP</strong>.</li>
+      <li>Unzip it and move the folder somewhere permanent. Chrome loads the
+        extension from that folder, so don't delete it afterwards.</li>
+      <li>Open <code>chrome://extensions</code> and turn on <strong>Developer
+        mode</strong>, top right.</li>
+      <li>Click <strong>Load unpacked</strong> and select the folder.</li>
+      <li>Apply to a job. That's it.</li>
     </ol>
     <p>
-      Google Sheets sync is optional and needs a one-time OAuth client; the README
-      walks through it. Everything else works immediately.
+      Google Sheets sync is optional and needs a one-time setup; the README walks
+      through it. Everything else works immediately.
     </p>
 
     <footer>

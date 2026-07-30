@@ -22,45 +22,64 @@ available if you want it, and optional.
 
 ## Quick start
 
-Nothing to install beyond the browser, and no account.
+**You do not need Node, npm, or a terminal to use Ghosted.** Those are only for
+running the tests or regenerating the icons. Installing is downloading a folder
+and pointing Chrome at it.
+
+Want to see what it does first? **[Try the live demo](https://ghosted.vercel.app/app?demo=1)**
+— the real dashboard on sample data, nothing to install.
+
+![The live demo running on sample data](docs/demo.jpg)
+
+### The easy way, no terminal
+
+1. Go to [the repo](https://github.com/devadigapratham/ghosted), click the green
+   **Code** button → **Download ZIP**.
+2. Unzip it, and move the `ghosted-main` folder somewhere you won't delete it —
+   Documents is fine. Chrome loads the extension *from that folder*, so if it
+   moves or gets thrown away, the extension stops working.
+3. Open `chrome://extensions` and turn on **Developer mode** (toggle, top right).
+4. Click **Load unpacked** and select the `ghosted-main` folder.
+5. Click the ghost icon in the toolbar → **Open dashboard**.
+6. Go apply to a job on any [supported board](#supported-job-boards).
+
+That's it. No account, no API keys, nothing to configure. Applications are saved
+on your own machine. Works in any Chromium browser: Chrome, Edge, Brave, Arc,
+Opera.
+
+### With git, if you have it
 
 ```sh
 git clone https://github.com/devadigapratham/ghosted.git
 ```
 
-1. Open `chrome://extensions`.
-2. Turn on **Developer mode** (toggle, top right).
-3. Click **Load unpacked** and select the `ghosted` folder you just cloned.
-4. Click the ghost icon in the toolbar → **Open dashboard**.
-5. Go apply to a job on any [supported board](#supported-job-boards).
+Then steps 3–6 above, selecting the `ghosted` folder. The advantage is updating:
+`git pull` instead of re-downloading.
 
-That's it. Applications are saved on your own machine. No Google account, no API
-keys, nothing to configure. Works in any Chromium browser: Chrome, Edge, Brave,
-Arc, Opera.
+### Worth thirty seconds
 
-Worth thirty seconds in the dashboard's **Settings** tab: if you need visa
-sponsorship leave that toggle on, since it drives the pre-apply warnings. Set
-your Role dropdown options and how many days of silence counts as ghosted.
+In the dashboard's **Settings** tab: if you need visa sponsorship leave that
+toggle on, since it drives the pre-apply warnings. Set your Role dropdown options
+and how many days of silence counts as ghosted.
 
 Optional extras, in the order most people want them:
 
 - [Import an existing spreadsheet](#import-and-export) if you were already
   tracking by hand.
 - [Connect a Google Sheet](#optional-google-sheets-sync) to mirror everything
-  somewhere shareable. Free, five minutes.
-- [Host the dashboard](#the-hosted-dashboard) so you can read your data on a
-  machine without the extension.
+  somewhere shareable, and to read it on your phone. Free, five minutes.
+- [Host the dashboard](#the-hosted-dashboard) to share a link or a demo.
 
 ### Keeping it up to date
 
-An unpacked extension does not auto-update. To pull changes:
+Extensions loaded from a folder don't auto-update.
 
-```sh
-git pull
-```
+- **ZIP:** download the new ZIP, replace the folder, then hit reload (↻) on the
+  card at `chrome://extensions`.
+- **git:** `git pull`, then the same reload.
 
-Then hit the reload (↻) icon on the card at `chrome://extensions`. Your data
-lives in browser storage, not in the folder, so updating never touches it.
+Your data lives in browser storage, not in the folder, so updating never touches
+it.
 
 ## How it works
 
